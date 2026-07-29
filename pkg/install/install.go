@@ -1,8 +1,6 @@
 // Package install verifies and installs qwen3-tts-native release tarballs.
-//
-// Host apps (voice agents, servers, CLIs) download a platform tarball, call
-// Ensure, then spawn bin/qwen3-tts-worker with the models/ directory.
-// This package has no dependency on any particular product (e.g. Samantha).
+// Optional helper used by cmd/qwen3-tts-ensure — not the product itself.
+// Hosts download a platform tarball, call Ensure, then spawn qwen3-tts-worker.
 package install
 
 import (

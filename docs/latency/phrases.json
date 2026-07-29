@@ -1,8 +1,17 @@
 {
   "schema": "qwen.latency.phrases.v1",
   "phrases": [
-    {"id": "short", "text": "Hello, I'm Samantha."},
-    {"id": "medium", "text": "Hello, I'm Samantha. I can help you navigate your tools and keep track of what we decide together."},
-    {"id": "long", "text": "Hello, I'm Samantha. I can help you navigate your tools and keep track of what we decide together. When you are ready, we can pin the engine, convert the models, and measure how quickly the first audio arrives. That way our latency claims stay honest and grounded in real numbers on this machine."}
+    {
+      "id": "short",
+      "text": "Hello from the native latency suite."
+    },
+    {
+      "id": "medium",
+      "text": "Hello from the native latency suite. This line is long enough for a mid-length utterance."
+    },
+    {
+      "id": "long",
+      "text": "Hello from the native latency suite. This longer line is used to measure full synthesis wall time and realtime factor without tying the fixture to any particular product brand."
+    }
   ]
 }

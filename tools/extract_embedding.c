@@ -1,5 +1,5 @@
 /* extract_embedding.c — maintainer tool: WAV → float32 embedding blob for preset/cache packaging.
- * Users never run this; Samantha ensure ships baked presets.
+ * Users never run this; release packages ship baked presets.
  *
  * Build (from repo root, after engine build):
  *   cc -O2 -o build/extract_embedding tools/extract_embedding.c \

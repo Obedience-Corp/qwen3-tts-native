@@ -1,6 +1,6 @@
-# Streaming plan (ship gate L1)
+# Streaming plan
 
-## Upstream fact (probe complete)
+## Upstream fact
 
 At ENGINE_SHA `b3ba140`, synth is **whole-utterance**:
 
@@ -8,46 +8,39 @@ At ENGINE_SHA `b3ba140`, synth is **whole-utterance**:
 2. decode full waveform  
 3. return / write WAV  
 
-Progress callback is **token counts only**, not PCM.
+Progress callback is token counts only, not PCM.
 
-Evidence: festival `002_DISCOVER/findings/D02_streaming.md`, code in `qwen3_tts.cpp`.
+## Goal
 
-## Product requirement
+`warm_ttfa_ms` ≪ `full_wall_ms` (first audible PCM before full utterance ends).
 
-Conversation cutover needs `warm_ttfa_ms` ≪ `full_wall_ms` (first audible PCM before full utterance).
+## Approach
 
-## Approach (distribution-aware)
+| Layer | Work |
+|-------|------|
+| Engine patch | Emit PCM after each vocoder hop / N codes |
+| Worker | Forward PCM frames over protocol v1 |
+| Host | Play as chunks arrive |
 
-| Layer | Work | Who runs it |
-|-------|------|-------------|
-| Engine patch | Emit PCM after each vocoder frame hop / N codes | Maintainer builds into release **binary** |
-| Worker | Binary protocol: `generating` / `pcm` / `final` / soft cancel | Same release tarball `bin/qwen3-tts-worker` |
-| Host app | Consume stream; optional progressive sentence feed | Any integrator (no just) |
-
-End users only download the **worker + models** package via the host; they never apply patches.
-
-## Implementation stages
-
-### Stage A — Protocol + warm worker (protocol-ready)
+### Stage A — warm worker (current)
 
 - Long-lived process, model load once  
-- Request/response: ready, synth, cancel  
-- **May** send one big `pcm` after full synth (protocol + lifecycle win)  
-- Soft cancel best-effort  
+- One PCM blob after full synth  
+- Soft cancel between requests  
 
-### Stage B — True streaming (ship gate)
+### Stage B — true streaming (ship gate)
 
-- Patch `Qwen3TTS` / C API: `pcm_callback(samples, n)` during decode or interleaved generate+decode  
-- Worker forwards length-prefixed PCM frames  
-- Bench multi-second phrase for TTFA ≪ full wall  
+- Engine / C API PCM callback during decode  
+- Multiple `pcm_meta` frames before `final`  
+- Bench multi-second phrase: TTFA ≪ full wall  
 
-### Stage C — Package
+### Stage C — package
 
-- Release asset includes `bin/qwen3-tts-worker`  
-- `install.json` points default entry to worker  
-- Samantha ensure installs worker path  
+- Release always includes `bin/qwen3-tts-worker`  
+- `install.json` entrypoint = worker  
 
 ## Status
 
-- Probe: **done**  
-- Stage A/B: next festival tasks under `03_stream_capability`  
+- Probe: done  
+- Stage A: in tree  
+- Stage B: planned  

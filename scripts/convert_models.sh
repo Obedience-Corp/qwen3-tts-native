@@ -65,8 +65,8 @@ cat > "$out_models/install.fragment.json" <<EOF
     "tokenizer": {"path": "qwen3-tts-tokenizer-f16.gguf", "sha256": "$hash_tok"}
   },
   "sample_rate": 24000,
-  "note": "Shipped to users via GitHub release assets + Samantha models ensure — not via this script."
+  "note": "Shipped via release tarballs from package_release.sh — not via convert."
 }
 EOF
 
-echo "Convert complete. Users do not run this; maintainers package via scripts/package_release.sh"
+echo "Convert complete. End users do not run this; maintainers package via scripts/package_release.sh"

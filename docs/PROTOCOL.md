@@ -1,17 +1,14 @@
 # qwen3-tts-worker protocol v1
 
-**Status:** Stage A frozen. Stage B (true streaming) extends PCM without
-breaking the control plane. Stable for any host application.
+**Status:** Stage A frozen. Stage B may emit multiple PCM chunks without
+changing the control-plane message types.
 
 ## Transport
 
-- Process: long-lived `bin/qwen3-tts-worker <model_dir>`
-- Control: **JSON lines** on stdin/stdout
-- Audio: after a `pcm_meta` line, **raw little-endian float32 mono** samples on
-  stdout (exact `n_samples * 4` bytes), then a newline + `final` JSON line
-
-Set `DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH` to the directory containing
-`libqwen3tts*` when `@rpath` does not resolve.
+- Process: `bin/qwen3-tts-worker <model_dir>`
+- Control: JSON lines on stdin/stdout
+- Audio: after `pcm_meta`, raw little-endian float32 mono (`n_samples * 4`
+  bytes), then newline + `final` JSON line
 
 ## Client → worker
 
@@ -23,10 +20,6 @@ Set `DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH` to the directory containing
 {"type":"shutdown"}
 ```
 
-- `preset`: name matching `models/presets/<Name>.q3te`
-- `ref_wav`: path for clone (uncached encode)
-- omit both → default engine voice
-
 ## Worker → client
 
 ```json
@@ -37,29 +30,8 @@ Set `DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH` to the directory containing
 {"type":"error","id":"<req>","message":"..."}
 ```
 
-Stage B will set `"streaming":true` and may emit **multiple** `pcm_meta`+payload
-pairs before `final`.
-
-## Install tree
-
-Hosts unpack the release tarball (or run `qwen3-tts-ensure`) so:
-
-```text
-<install-root>/
-  install.json
-  bin/qwen3-tts-worker
-  bin/libqwen3tts*
-  models/*.gguf
-  models/presets/*.q3te
-  models/presets/presets.json
-```
-
-End users of a product never speak this protocol manually; host apps do.
+Stage B: `"streaming":true` and multiple `pcm_meta` payloads before `final`.
 
 ## Soft cancel
 
-Stage A: cancel between requests only. Stage B: cancel mid-synth via engine flag.
-
-## Reference client
-
-Go: `pkg/workerclient` (`StartWorker`, `Synthesize`, `Cancel`, `WriteWAV16`).
+Stage A: between requests only. Stage B: mid-synth.

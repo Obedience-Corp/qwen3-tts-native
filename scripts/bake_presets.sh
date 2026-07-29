@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Maintainer/CI: bake CustomVoice-class preset embeddings for distribution.
-# Uses existing Samantha managed Python install ONLY offline to generate short
-# reference WAVs, then native extract_embedding for shippable .q3te blobs.
-# End users receive presets/ inside the release tarball — they never run this.
+# Offline reference generation may use a local Python Qwen install if present;
+# shipping artifacts are native .q3te blobs only. End users never run this.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -65,7 +64,7 @@ for v in "${VOICES[@]}"; do
   "$extract" "$models" "$wav" "$emb"
 done
 
-# Manifest for packaging / Samantha ensure
+# Manifest for packaging
 {
   echo '{'
   echo '  "schema": "qwen3-tts-native.presets.v1",'

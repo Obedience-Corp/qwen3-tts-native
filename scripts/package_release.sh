@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Build a distribution-ready tree that Samantha / Obey Voice will install for users.
+# Build a distribution-ready tree for host apps to download and unpack.
 # Maintainers run this after convert + engine build + worker build.
-# End users download the tarball via ensure — never run this script.
+# End users of products never run this script.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"

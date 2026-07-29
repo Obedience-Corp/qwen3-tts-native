@@ -1,105 +1,64 @@
-# Integrating qwen3-tts-native (any host)
+# Integrating qwen3-tts-native
 
-This project is a **standalone native Qwen3-TTS runtime**: release tarball +
-long-lived worker + frozen protocol + optional Go libraries. It is **not**
-tied to any one voice app.
+Host apps download a platform **release tarball**, verify hashes, unpack, and
+spawn `bin/qwen3-tts-worker`. Language-agnostic. The wire contract is
+[PROTOCOL.md](PROTOCOL.md).
 
-Known integrators (optional): Samantha, Obey Voice, your own agent or server.
-
-## What you ship to users
-
-A platform tarball from `just release package`:
+## What you ship
 
 ```text
 qwen3-tts-native-<gitshort>-<os>-<arch>.tar.gz
 ```
 
-Contents after unpack (or after `qwen3-tts-ensure`):
+After unpack:
 
 ```text
 <install-root>/
-  install.json          # schema qwen3-tts-native.install.v1 + hashes
+  install.json
   SHA256SUMS
-  bin/qwen3-tts-worker  # product process
-  bin/qwen3-tts-cli     # one-shot debug
+  bin/qwen3-tts-worker
+  bin/qwen3-tts-cli
   bin/libqwen3tts*
   models/*.gguf
-  models/presets/*.q3te
-  models/presets/presets.json
-  cache/…               # optional host-managed clone cache
+  models/presets/*
 ```
 
-Users of **your** app never run `just` or convert models.
+## Install
 
-## Install (host side)
-
-### CLI
+Manual:
 
 ```bash
-go install github.com/Obedience-Corp/qwen3-tts-native/cmd/qwen3-tts-ensure@latest
-# or from a checkout:
-go run ./cmd/qwen3-tts-ensure -dir ~/.local/share/qwen3-tts \
-  -url https://example.com/qwen3-tts-native-….tar.gz \
-  -sha256 <hex> -tier 0.6b
+tar -xzf qwen3-tts-native-….tar.gz
+# tree is usually one top-level dir — strip or rename to your install root
 ```
 
-Env alternatives: `QWEN3_TTS_NATIVE_URL`, `QWEN3_TTS_NATIVE_SHA256`.
+Optional helper (Go, not required):
 
-### Go library
-
-```go
-import "github.com/Obedience-Corp/qwen3-tts-native/pkg/install"
-
-st, err := install.Ensure(ctx, installRoot, install.Options{
-    URL: url, SHA256: sha, Tier: "0.6b",
-}, nil)
-// st.Worker, st.ModelDir ready for StartWorker
+```bash
+go run ./cmd/qwen3-tts-ensure -dir <install-root> -url <tar.gz> -sha256 <hex>
 ```
 
-## Runtime (host side)
+Env: `QWEN3_TTS_NATIVE_URL`, `QWEN3_TTS_NATIVE_SHA256`.
 
-1. Start **once** (warm load):  
-   `bin/qwen3-tts-worker <path-to-models>`  
-   Set `DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH` to `bin/` if needed.
-2. Speak **protocol v1** on stdin/stdout — see [PROTOCOL.md](PROTOCOL.md).
-3. Soft-cancel with `{"type":"cancel","id":…}` (stage A: between requests).
-4. Prefer **worker**, not CLI, for multi-turn / conversation latency.
+## Runtime
 
-### Go client
+1. Start once: `bin/qwen3-tts-worker <path-to-models>`  
+   Put `bin/` on `DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH` if needed.
+2. Speak protocol v1 on stdin/stdout ([PROTOCOL.md](PROTOCOL.md)).
+3. Prefer **worker** over CLI for multi-turn latency (model stays loaded).
 
-```go
-import "github.com/Obedience-Corp/qwen3-tts-native/pkg/workerclient"
-
-c, ready, err := workerclient.StartWorker(ctx, workerBin, modelDir)
-res, err := c.Synthesize(ctx, "id1", "Hello", "Vivian")
-// res.Samples is []float32 mono @ ready.SampleRate (24000)
-```
-
-### Any language
-
-Implement the JSONL + raw f32le PCM framing from PROTOCOL.md. No proprietary
-hooks.
+Any language can implement the client. A small Go helper exists at
+`pkg/workerclient` for smoke tests — you do not need Go in production.
 
 ## Tiers
 
-| Tier | Status |
+| Tier | Notes |
 |------|--------|
-| `0.6b` | Default ship tier |
-| `1.7b` | Optional; may be absent / engine-blocked — fail closed if requested missing |
+| `0.6b` | Default ship |
+| `1.7b` | Optional; may be absent — fail closed if requested but missing |
 
-Set `install.Options.Tier` or `-tier` accordingly.
+## Rules
 
-## Hard rules for integrators
-
-1. **No Python at inference** (this package never requires it at runtime).
-2. Do not treat whole-utterance CLI as the product path.
-3. Verify `install.json` / SHA-256 before trusting binaries.
-4. Stage A: first audio ≈ full synth wall until streaming (stage B) lands.
-
-## Maintainer path (this repo only)
-
-```bash
-just engine pin && just engine build && just engine worker
-just convert models   # offline Python OK here only
-just release package  # writes dist/*.tar.gz
-```
+1. No Python at inference.
+2. Verify `install.json` / SHA-256 before trusting binaries.
+3. Stage A: first audio ≈ full synth wall until streaming (stage B).

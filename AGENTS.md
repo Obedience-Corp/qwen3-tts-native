@@ -1,25 +1,22 @@
 # Agent notes — qwen3-tts-native
 
+## What this repo is
+
+A **native runtime packaging** project: pin/build C++ TTS engine, convert GGUF,
+bake presets, ship `qwen3-tts-worker` + release tarball.
+
+It is **not** a Go application or library product. Go under `cmd/` and `pkg/`
+is optional maintainer/host tooling around the real artifacts (worker + models).
+
 ## Product rules
 
 1. **No Python at inference.** Offline convert/goldens only.
-2. Do not reimplement the full Qwen pipeline in pure Go. Prefer pinned
-   C++/GGML engine + thin Go client (`pkg/workerclient`).
-3. Pin engine git SHA and GGUF hashes; never track floating `main` as product.
-4. This repo is a **standalone native runtime**. Do not embed app-specific TUI,
-   brain, or serve code. Optional integrators (Samantha, etc.) live elsewhere.
-5. Public contracts: `docs/PROTOCOL.md`, `install.json` schema,
-   `pkg/install`, `pkg/workerclient`.
+2. Do not reimplement the Qwen transformer in pure Go.
+3. Pin engine git SHA and GGUF hashes; no floating `main` as product.
+4. Do not embed product-app UI, brain, or serve code here.
+5. Public contracts: worker binary, `docs/PROTOCOL.md`, `install.json` schema.
 
-## Go packages
+## Commits
 
-| Package | Import path |
-|---------|-------------|
-| install | `github.com/Obedience-Corp/qwen3-tts-native/pkg/install` |
-| worker client | `github.com/Obedience-Corp/qwen3-tts-native/pkg/workerclient` |
-
-## Campaign (optional)
-
-When checked out under My_Tools as `projects/qwen3-tts-native`, use
-`camp p commit` / festival commits as usual. Design notes may live in the
-campaign, but **this repo must remain usable alone**.
+From a monorepo submodule checkout, use that workspace’s project-commit flow.
+This tree must stay usable as a standalone git repo.

@@ -21,19 +21,24 @@ Install layout after ensure (product):
 ```text
 models_dir/qwen3-tts/
   install.json
-  bin/qwen3-tts-cli          # or worker binary later
-  bin/libqwen3tts.*          # optional cgo
+  SHA256SUMS
+  bin/qwen3-tts-worker       # product entrypoint (JSONL + PCM)
+  bin/qwen3-tts-cli          # lab/debug only
+  bin/libqwen3tts*.dylib
   models/*.gguf
-  cache/speaker-embeddings/  # runtime cache
-  presets/                   # baked embeddings (later)
+  models/presets/*.q3te
+  models/presets/presets.json
+  cache/speaker-embeddings/  # runtime clone cache (created by app)
 ```
 
 ## Maintainers / CI (this repo)
 
 ```text
-just engine pin && just engine build   # produce binaries
+just engine pin && just engine build   # produce CLI + lib
+just engine worker                     # build/qwen3-tts-worker
 just convert models                    # offline HF → GGUF (Python OK here)
-just release package                   # dist/*.tar.gz + install.json
+# bake presets if needed
+just release package                   # dist/*.tar.gz + install.json + SHA256SUMS
 # attach tarball to GitHub Release (private org OK)
 ```
 
@@ -45,7 +50,17 @@ Samantha’s ensure job then points at that release URL + expected hashes.
 
 `dist/qwen3-tts-native-<gitshort>-<os>-<arch>.tar.gz`
 
-Containing `install.json` (schema `qwen3-tts-native.install.v1`) and SHA256SUMS.
+Containing:
+
+| Path | Purpose |
+|------|---------|
+| `install.json` | schema `qwen3-tts-native.install.v1` + per-file SHA-256 |
+| `SHA256SUMS` | full tree checksums for ensure |
+| `bin/qwen3-tts-worker` | **required** product binary |
+| `bin/qwen3-tts-cli` | lab smoke |
+| `bin/libqwen3tts*.dylib` | shared lib (`@loader_path`) |
+| `models/*.gguf` | 0.6B tier + tokenizer |
+| `models/presets/*` | baked CustomVoice-class embeddings |
 
 ## Not for v1 user path
 
@@ -61,3 +76,11 @@ Containing `install.json` (schema `qwen3-tts-native.install.v1`) and SHA256SUMS.
 | `bin/libqwen3tts*.dylib` | Shared lib for worker/cgo |
 
 Samantha should launch **worker**, not CLI, for conversation.
+
+## install.json fields (v1)
+
+- `bin.worker` / `bin.worker_sha256` — product entrypoint
+- `bin.lib` / `bin.lib_sha256` — shared library
+- `protocol`: `qwen3-tts-worker/v1`
+- `streaming`: `false` until stage B
+- `presets` + `presets_sha256`

@@ -42,6 +42,43 @@ build:
     cmake -S "$eng" -B "$eng/build"
     cmake --build "$eng/build" -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
     echo "Built under $eng/build"
+    # Stage shared lib into lab build/ for worker packaging
+    mkdir -p "$root/build"
+    if [[ -f "$eng/build/libqwen3tts.dylib" ]]; then
+      cp -a "$eng/build"/libqwen3tts*.dylib "$root/build/" 2>/dev/null || true
+    fi
+    echo "Run: just engine worker  # product binary"
+
+# Build stage-A qwen3-tts-worker into build/ (requires just engine build first).
+worker:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    eng="$root/third_party/qwen3-tts.cpp"
+    inc="$eng/src"
+    libdir="$eng/build"
+    mkdir -p "$root/build"
+    if [[ ! -f "$libdir/libqwen3tts.dylib" && ! -f "$root/build/libqwen3tts.dylib" ]]; then
+      echo "Missing libqwen3tts — run: just engine build" >&2
+      exit 1
+    fi
+    # Prefer engine build dylibs; copy to build/ for @loader_path packaging
+    if [[ -f "$libdir/libqwen3tts.dylib" ]]; then
+      cp -a "$libdir"/libqwen3tts*.dylib "$root/build/"
+    fi
+    cc -O2 -Wall -Wextra \
+      -I"$inc" \
+      -L"$root/build" \
+      -Wl,-rpath,@loader_path \
+      -o "$root/build/qwen3-tts-worker" \
+      "$root/tools/worker_main.c" \
+      -lqwen3tts
+    # On macOS, ensure install name resolution via @rpath
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      install_name_tool -add_rpath @loader_path "$root/build/qwen3-tts-worker" 2>/dev/null || true
+    fi
+    echo "Built $root/build/qwen3-tts-worker"
+    otool -L "$root/build/qwen3-tts-worker" 2>/dev/null || ldd "$root/build/qwen3-tts-worker" 2>/dev/null || true
 
 # Remove engine build directories (keeps source pin).
 clean:

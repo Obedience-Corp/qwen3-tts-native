@@ -111,13 +111,14 @@ platform-strict:
     chmod +x "$root/scripts/smoke_platform.sh"
     REQUIRE_PLATFORM_SMOKE=1 "$root/scripts/smoke_platform.sh"
 
-# Linux CUDA validation (Arch + NVIDIA). Fails if no GPU or incomplete build.
+# Linux CUDA validation (Arch + RTX 5060 Ti). Fails if no GPU or CPU fallback.
 platform-cuda:
     #!/usr/bin/env bash
     set -euo pipefail
     root="$(git rev-parse --show-toplevel)"
     chmod +x "$root/scripts/smoke_platform.sh"
-    REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 "$root/scripts/smoke_platform.sh"
+    REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 QWEN3_TTS_BACKEND=cuda \
+      "$root/scripts/smoke_platform.sh"
 
 # Run all green gates for this sequence (smoke + harness + latency/cancel).
 all:

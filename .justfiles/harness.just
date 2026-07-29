@@ -3,13 +3,13 @@
 default:
     @just --list --justfile {{source_file()}}
 
-# Unit tests (no model load) + platform smoke script self-check.
+# Unit tests (no model load) + platform smoke contract.
 test:
     #!/usr/bin/env bash
     set -euo pipefail
     root="$(git rev-parse --show-toplevel)"
-    (cd "$root" && go test ./pkg/...)
-    chmod +x "$root/scripts/smoke_platform_test.sh"
+    (cd "$root" && go test ./pkg/... ./cmd/platform-smoke/)
+    chmod +x "$root/scripts/smoke_platform_test.sh" "$root/scripts/smoke_platform.sh"
     "$root/scripts/smoke_platform_test.sh"
 
 # Build ensure + smoke binaries into build/.
@@ -21,7 +21,8 @@ build:
     (cd "$root" && go build -o "$root/build/qwen3-tts-ensure" ./cmd/qwen3-tts-ensure)
     (cd "$root" && go build -o "$root/build/worker-smoke" ./cmd/worker-smoke)
     (cd "$root" && go build -o "$root/build/worker-bench" ./cmd/worker-bench)
-    echo "built ensure + worker-smoke + worker-bench under $root/build"
+    (cd "$root" && go build -o "$root/build/platform-smoke" ./cmd/platform-smoke)
+    echo "built ensure + smokes under $root/build"
 
 # Stage-A E2E against local build/ + models/.
 smoke:

@@ -1,0 +1,44 @@
+{
+  "schema": "qwen.platform.v1",
+  "status": "passed",
+  "timestamp_utc": "2026-07-29T08:39:16Z",
+  "host": {
+    "os": "linux",
+    "arch": "amd64",
+    "distribution": "EndeavourOS",
+    "kernel": "Linux 7.1.3-arch1-2",
+    "gpu": "NVIDIA GeForce RTX 5060 Ti",
+    "gpu_memory_mib": "16311",
+    "driver": "610.43.03"
+  },
+  "build": {
+    "repo_commit": "b2e04f2b3f16124d5748e8524e9f97cc2b5f6d41",
+    "repo_dirty": false,
+    "engine_sha": "b3ba14077cf1b3e11b86e5f84aa9184605c89b28",
+    "worker": "build/qwen3-tts-worker",
+    "models": "models",
+    "preset": "Aiden"
+  },
+  "backend": {
+    "requested": "cuda",
+    "require_cuda": true,
+    "cuda_confirmed": true,
+    "evidence": [
+      "TTSTransformer backend: CUDA0",
+      "AudioTokenizerDecoder backend: CUDA0"
+    ]
+  },
+  "protocol": {
+    "name": "qwen3-tts-worker/v1",
+    "sample_rate": 24000,
+    "format": "f32le",
+    "samples": 57045,
+    "audio_seconds": 2.376875,
+    "elapsed_ms": 2920,
+    "peak": 0.5360726714134216,
+    "rms": 0.11586220882352537,
+    "final": true,
+    "streaming": false
+  },
+  "stderr_log": "artifacts/platform/platform_Linux_x86_64_cuda.worker.log"
+}

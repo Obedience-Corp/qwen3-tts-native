@@ -5,7 +5,7 @@ no Python at inference.
 
 This is **not** a Go library project. The product is:
 
-1. A **pinned C++ engine** (qwen3-tts.cpp / GGML, Metal on macOS)
+1. A **pinned C++ engine** (qwen3-tts.cpp / GGML — Metal on macOS, CUDA/CPU on Linux)
 2. **GGUF model files** + baked speaker presets
 3. A long-lived **`qwen3-tts-worker`** process with a frozen stdin/stdout protocol
 4. A **release tarball** (`install.json` + SHA-256) that apps download and unpack
@@ -52,6 +52,7 @@ Docs:
 - [docs/PROTOCOL.md](docs/PROTOCOL.md) — wire protocol
 - [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) — tarball layout
 - [docs/INTEGRATION.md](docs/INTEGRATION.md) — host integration
+- [docs/PLATFORMS.md](docs/PLATFORMS.md) — macOS / Linux (CUDA) / Windows
 - [docs/TIERS.md](docs/TIERS.md) — 0.6B / 1.7B
 
 ## Maintainer path (this checkout)
@@ -59,10 +60,12 @@ Docs:
 ```bash
 just                         # list recipes
 ENGINE_SHA=<sha> just engine pin
-just engine build
+just engine build            # macOS Metal; Linux CPU
+# Linux + NVIDIA (e.g. Arch, RTX 5060 16GB):
+#   CUDA=1 just engine build
 just engine worker
 just convert models          # offline HF → GGUF
-just release package         # dist/*.tar.gz
+just release package         # dist/*-<os>-<arch>.tar.gz
 just harness smoke           # optional E2E against local build/
 ```
 

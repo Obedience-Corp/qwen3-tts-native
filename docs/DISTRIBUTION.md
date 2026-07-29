@@ -23,12 +23,14 @@ verifies a prebuilt tarball.
 ## Maintainers (this repo)
 
 ```text
-just engine pin && just engine build
+just engine pin && just engine build     # or CUDA=1 just engine build on Linux+NVIDIA
 just engine worker
 just convert models
 just release package
-# publish dist/*.tar.gz + checksums
+# publish dist/*.tar.gz + checksums per platform
 ```
+
+See [PLATFORMS.md](PLATFORMS.md) for macOS / Linux / Windows.
 
 ## Artifact
 
@@ -40,6 +42,7 @@ just release package
 | `SHA256SUMS` | full tree checksums |
 | `bin/qwen3-tts-worker` | product process |
 | `bin/qwen3-tts-cli` | one-shot debug |
+| `bin/libqwen3tts.*` | shared lib (`.dylib` or `.so`) |
 | `models/*` | GGUF + presets |
 
 Hosts launch **worker**, not CLI, for interactive use.

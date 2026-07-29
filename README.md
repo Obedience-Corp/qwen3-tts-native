@@ -66,22 +66,29 @@ interpreter.
 
 **Scaffold only.** Wave 0–1 from design `WI-1a04ee` not started in this tree yet.
 
-## Local commands
+## Users vs maintainers
+
+| Who | How they get native Qwen |
+|-----|---------------------------|
+| **End users** | Samantha Settings / `models ensure` downloads a **release tarball** — no `just`, no Python, no convert |
+| **Maintainers / CI** | `just` recipes below build, convert, and package that tarball |
+
+See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+
+## Maintainer commands (`just`)
 
 ```bash
 just                 # list root + modules
 just status          # git + layout
-just engine          # list engine recipes
-just convert         # list offline convert recipes
-just harness
-just bench
-just release
+just engine          # pin / build / clean
+just convert         # offline HF → GGUF (Python OK here only)
+just release package # dist/*.tar.gz + install.json for product download
+just bench smoke     # CLI WAV check after convert
 
-# examples (Wave 1+)
 ENGINE_SHA=<sha> just engine pin
 just engine build
-just convert venv
-just bench smoke
+just convert models
+just release package
 ```
 
 ## Integration path (later)

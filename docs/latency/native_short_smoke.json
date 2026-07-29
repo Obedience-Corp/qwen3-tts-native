@@ -1,0 +1,14 @@
+{
+  "schema": "qwen.latency.v1",
+  "machine": {"chip": "Apple M4 Max", "os": "macOS 26.5", "arch": "arm64"},
+  "backend": "native-metal",
+  "engine_sha": "b3ba14077cf1b3e11b86e5f84aa9184605c89b28",
+  "model": "qwen3-tts-0.6b-f16.gguf",
+  "phrase_id": "smoke",
+  "cold_load_ms": 12473,
+  "full_wall_ms": 3985,
+  "warm_ttfa_ms": 3985,
+  "note": "TTFA=full wall (whole-utterance). Load separate. RTF~1.43. sample_rate=24000.",
+  "audio_duration_s": 2.78,
+  "peak_rss_gb": 2.79
+}

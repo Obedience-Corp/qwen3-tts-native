@@ -19,6 +19,28 @@ tarball is one `(os, arch, backend)` build.
 | Apple Silicon Mac (e.g. M4 Max) | Primary macOS Metal smoke + latency |
 | **Arch Linux + NVIDIA RTX 5060 16 GB** | Primary **Linux CUDA** smoke + package |
 
+### In-repo tests
+
+| Command | Behavior |
+|---------|----------|
+| `just harness test` | Go unit tests + `scripts/smoke_platform_test.sh` (skip-path self-check) |
+| `just bench platform` | Full host smoke if worker+GGUF present; **skips** (exit 0) otherwise |
+| `just bench platform-strict` | Same but **fails** on skip — use on validation machines |
+| `just bench platform-cuda` | Strict + **requires** `nvidia-smi` (Linux CUDA validation) |
+
+Script: `scripts/smoke_platform.sh`.
+
+**Arch + RTX 5060 validation checklist**
+
+```bash
+CUDA=1 just engine build && just engine worker
+# models/ must have GGUF + presets (copy from Mac package or convert)
+REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 just bench platform-cuda
+# then commit artifacts → docs/latency/ and flip this matrix to Validated
+```
+
+Track open work: [Issue #1 — Validate Linux CUDA on Arch + RTX 5060](https://github.com/Obedience-Corp/qwen3-tts-native/issues/1).
+
 RTX 50-series (Blackwell) needs a **current** NVIDIA driver and a **recent CUDA
 toolkit** (often 12.8+) so GGML/CUDA can target the GPU. If CUDA init fails,
 the engine may fall back to CPU — check worker stderr and set
@@ -108,6 +130,9 @@ field is `bin/libqwen3tts.dylib` on macOS or `bin/libqwen3tts.so` on Linux.
 | **Recipes ready** | `just`/package produce the right artifact shapes; awaiting host smoke |
 | **Planned** | Documented intent only |
 
-After the first green Linux CUDA smoke on the Arch + 5060 host, promote Linux
-x86_64 CUDA to **Validated** and record a short note under `docs/latency/`
-(machine profile + one `worker_warmish.json`).
+After the first green `just bench platform-cuda` on the Arch + 5060 host:
+
+1. Copy `artifacts/latency/platform_Linux_*_cuda.json` and
+   `artifacts/latency/platform_machine_profile.txt` into `docs/latency/`.
+2. Flip Linux x86_64 CUDA to **Validated** in the matrix above.
+3. Close the tracking GitHub issue.

@@ -17,7 +17,7 @@ smoke:
     fi
     if [[ ! -f "$models/qwen3-tts-0.6b-f16.gguf" || ! -f "$models/qwen3-tts-tokenizer-f16.gguf" ]]; then
       echo "Missing GGUF — maintainer: just convert models"
-      echo "Users never convert: they get a release tarball via Samantha ensure."
+      echo "Users get a release tarball; they never convert."
       exit 1
     fi
     out="$root/artifacts/smoke.wav"
@@ -91,6 +91,34 @@ latency:
     ls -la "$root/docs/latency/"
     cat "$root/docs/latency/worker_warmish.json"
 
+# Platform smoke (worker + optional CLI). Skips cleanly if binaries/models missing.
+# Validation hosts (Arch + RTX 5060 CUDA, or macOS Metal with full build):
+#   REQUIRE_PLATFORM_SMOKE=1 just bench platform
+# Linux CUDA must-pass:
+#   REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 just bench platform
+platform:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    chmod +x "$root/scripts/smoke_platform.sh"
+    "$root/scripts/smoke_platform.sh"
+
+# Strict platform smoke (fail on skip) — use on validation hardware.
+platform-strict:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    chmod +x "$root/scripts/smoke_platform.sh"
+    REQUIRE_PLATFORM_SMOKE=1 "$root/scripts/smoke_platform.sh"
+
+# Linux CUDA validation (Arch + NVIDIA). Fails if no GPU or incomplete build.
+platform-cuda:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    chmod +x "$root/scripts/smoke_platform.sh"
+    REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 "$root/scripts/smoke_platform.sh"
+
 # Run all green gates for this sequence (smoke + harness + latency/cancel).
 all:
     #!/usr/bin/env bash
@@ -99,6 +127,7 @@ all:
     just harness test
     just harness smoke
     just bench latency
+    just bench platform
     echo "bench all green"
 
 # Compare native output to offline golden fixtures.

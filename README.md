@@ -67,6 +67,11 @@ just engine worker
 just convert models          # offline HF → GGUF
 just release package         # dist/*-<os>-<arch>.tar.gz
 just harness smoke           # optional E2E against local build/
+just harness test            # unit tests + platform script self-check
+just bench platform          # host smoke (skips if no worker/models)
+# Arch + RTX 5060 CUDA validation:
+#   CUDA=1 just engine build && just engine worker
+#   REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 just bench platform-cuda
 ```
 
 ## Layout

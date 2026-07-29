@@ -3,12 +3,14 @@
 default:
     @just --list --justfile {{source_file()}}
 
-# Unit tests (no model load).
+# Unit tests (no model load) + platform smoke script self-check.
 test:
     #!/usr/bin/env bash
     set -euo pipefail
     root="$(git rev-parse --show-toplevel)"
     (cd "$root" && go test ./pkg/...)
+    chmod +x "$root/scripts/smoke_platform_test.sh"
+    "$root/scripts/smoke_platform_test.sh"
 
 # Build ensure + smoke binaries into build/.
 build:

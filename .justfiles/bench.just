@@ -24,10 +24,18 @@ smoke:
     ls -lh "$out"
 
 # Record cold/warm/TTFA metrics (Wave 0).
+# Design source: campaign workflow/design/samantha-native-qwen-tts/latency.md
+# Issues: L1 whole-utterance, L2 cold load, L3 clone encode, L4 cancel reload,
+# L5 Python glue, L6 CLI reload, L11 backend — fill artifacts/latency/*.json
 latency:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "TODO: instrument cold ready + warm TTFA + RTF into artifacts/latency.json"
+    root="$(git rev-parse --show-toplevel)"
+    mkdir -p "$root/artifacts/latency"
+    echo "Wave 0 plan: campaign design WI-1a04ee latency.md §5–§6"
+    echo "Write JSON next to: $root/artifacts/latency/"
+    echo "schema: qwen.latency.v1 (see latency.md)"
+    echo "TODO: instrument cold ready + warm TTFA + RTF"
     exit 1
 
 # Compare native output to offline golden fixtures.

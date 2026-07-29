@@ -1,0 +1,8 @@
+{
+  "schema": "qwen.latency.phrases.v1",
+  "phrases": [
+    {"id": "short", "text": "Hello, I'm Samantha."},
+    {"id": "medium", "text": "Hello, I'm Samantha. I can help you navigate your tools and keep track of what we decide together."},
+    {"id": "long", "text": "Hello, I'm Samantha. I can help you navigate your tools and keep track of what we decide together. When you are ready, we can pin the engine, convert the models, and measure how quickly the first audio arrives. That way our latency claims stay honest and grounded in real numbers on this machine."}
+  ]
+}

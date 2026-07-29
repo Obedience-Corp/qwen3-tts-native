@@ -1,0 +1,7 @@
+{
+  "schema": "qwen.latency.v1",
+  "backend": "native-qwen3-tts-cpp",
+  "engine_sha": "b3ba14077cf1b3e11b86e5f84aa9184605c89b28",
+  "status": "deferred_until_gguf",
+  "note": "CLI built with Metal; models/ GGUF not converted yet. Complete native rows in phase 005 after convert."
+}

@@ -1,0 +1,3 @@
+ENGINE_SHA=b3ba14077cf1b3e11b86e5f84aa9184605c89b28
+Built: 2026-07-28 Metal arm64
+CLI: third_party/qwen3-tts.cpp/build/qwen3-tts-cli (local only, not committed)

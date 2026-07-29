@@ -64,7 +64,9 @@ interpreter.
 
 ## Status
 
-**Scaffold only.** Wave 0–1 from design `WI-1a04ee` not started in this tree yet.
+**Active lab (festival SN0001).** Stage-A warm worker + Go harness smoke green
+(`just harness test` / `just harness smoke`). Engine pin + 0.6B package path work;
+1.7B blocked on upstream context; true PCM stream is stage B.
 
 ## Users vs maintainers
 
@@ -84,10 +86,13 @@ just engine          # pin / build / clean
 just convert         # offline HF → GGUF (Python OK here only)
 just release package # dist/*.tar.gz + install.json for product download
 just bench smoke     # CLI WAV check after convert
+just harness test    # Go unit tests (no model load)
+just harness smoke   # stage-A worker protocol E2E → 24 kHz WAV
 
 ENGINE_SHA=<sha> just engine pin
 just engine build
 just convert models
+just harness smoke
 just release package
 ```
 

@@ -1,32 +1,42 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
+# Build
+/build/
+**/build/
+cmake-build-*/
+*.o
+*.a
 *.so
 *.dylib
+*.dll
+*.exe
 
-# Test binary, built with `go test -c`
-*.test
+# Models & large artifacts (download/convert locally; do not commit weights)
+/models/
+**/models/**/*.gguf
+**/models/**/*.safetensors
+**/models/**/*.bin
+**/models/**/*.pt
+**/models/**/*.onnx
+*.wav
+!docs/fixtures/.gitkeep
 
-# Code coverage profiles and other test artifacts
-*.out
-coverage.*
-*.coverprofile
-profile.cov
+# Python (offline tooling only — never ship venvs)
+.venv/
+venv/
+__pycache__/
+*.pyc
+.uv/
+.python-version
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
 
-# Go workspace file
-go.work
-go.work.sum
+# Harness / benches
+/artifacts/
+/tmp/
+*.prof
 
-# env file
-.env
-
-# Editor/IDE
-# .idea/
-# .vscode/
+# Engine checkout (if not using submodule yet)
+/third_party/qwen3-tts.cpp/

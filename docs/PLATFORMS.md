@@ -6,7 +6,7 @@ logged the requested accelerator without silently falling back to CPU.
 
 | OS | Architecture | Backend | Status | Evidence |
 |---|---|---|---|---|
-| Linux (Arch family) | x86_64 | NVIDIA CUDA | Pending validation | `docs/latency/platform_Linux_x86_64_cuda.json` |
+| Linux (Arch family) | x86_64 | NVIDIA CUDA | Validated | `docs/latency/platform_Linux_x86_64_cuda.json` |
 | macOS | arm64 | Metal | Build-only | `docs/latency/native_baseline_status.json` |
 
 ## Linux CUDA validation
@@ -39,6 +39,11 @@ missing, synthesis or protocol validation fails, PCM contains non-finite
 samples, or worker logs show CPU fallback. Copy the green JSON result into
 `docs/latency/`, add a machine profile, and then change the matrix status to
 `Validated`.
+
+The validated host is an EndeavourOS/Arch machine with an NVIDIA GeForce RTX
+5060 Ti 16 GB, driver 610.43.03, and CUDA 13.3. The committed result records a
+clean run against repository commit `b2e04f2` and pinned engine commit
+`b3ba140`.
 
 Without `REQUIRE_PLATFORM_SMOKE=1`, a host missing the worker or models reports
 `skipped` and exits successfully. This keeps ordinary unit-test environments

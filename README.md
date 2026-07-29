@@ -23,20 +23,23 @@ interpreter.
 
 ## Scope
 
-**In**
+**In (required — not “later”)**
 
-- Pin and build [qwen3-tts.cpp](https://github.com/predict-woo/qwen3-tts.cpp) (or fork)
-- GGUF conversion pipeline (offline Python OK)
-- Release artifacts: platform binaries + model manifests/hashes
-- Long-lived worker or CLI protocol for PCM synthesis + cancel
-- Latency and parity benches against official reference audio
-- Optional small Go harness that only speaks the worker protocol
+- Pin and build [qwen3-tts.cpp](https://github.com/predict-woo/qwen3-tts.cpp) (**fork** if product needs patches)
+- GGUF for **0.6B + 1.7B** (+ quant when gated); offline Python convert OK
+- **Streaming** long-lived worker (PCM before utterance ends) + soft cancel
+- **CustomVoice-class presets** + clone path with **embedding cache**
+- Binary PCM protocol; CLI is lab/debug only
+- Latency/parity benches (TTFA ≪ full wall proof)
+- Go harness; **cgo/lib** if IPC benches say so
+- Release artifacts: binaries + manifests/hashes
 
 **Out**
 
 - Samantha TUI, brain, Kokoro, serve, personas (live in `samantha`)
 - Managed uv/torch install trees
 - Pure-Go reimplementation of transformer kernels
+- Product cutover that is Base-only / whole-WAV CLI / no stream
 
 ## Layout (initial)
 

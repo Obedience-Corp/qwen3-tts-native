@@ -31,6 +31,11 @@ mkdir -p "$dist/bin" "$dist/models"
 
 cp "$cli" "$dist/bin/qwen3-tts-cli"
 chmod +x "$dist/bin/qwen3-tts-cli"
+worker="$root/build/qwen3-tts-worker"
+if [[ -x "$worker" ]]; then
+  cp "$worker" "$dist/bin/qwen3-tts-worker"
+  chmod +x "$dist/bin/qwen3-tts-worker"
+fi
 if [[ -f "$lib" ]]; then
   cp "$lib" "$dist/bin/"
   # copy real dylib if symlink
@@ -71,7 +76,8 @@ cat > "$dist/install.json" <<EOF
   "sample_rate": 24000,
   "bin": {
     "cli": "bin/qwen3-tts-cli",
-    "cli_sha256": "$hash_cli"
+    "cli_sha256": "$hash_cli",
+    "worker": "bin/qwen3-tts-worker"
   },
   "models": {
     "0.6b": {

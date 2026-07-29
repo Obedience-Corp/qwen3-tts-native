@@ -51,3 +51,13 @@ Containing `install.json` (schema `qwen3-tts-native.install.v1`) and SHA256SUMS.
 
 - Running convert on laptop as setup
 - Documenting `just` as the install story in Samantha README
+
+## Binaries in the tarball
+
+| Binary | Role |
+|--------|------|
+| `bin/qwen3-tts-cli` | Lab/debug one-shot WAV |
+| `bin/qwen3-tts-worker` | Product long-lived process (JSONL + PCM) |
+| `bin/libqwen3tts*.dylib` | Shared lib for worker/cgo |
+
+Samantha should launch **worker**, not CLI, for conversation.

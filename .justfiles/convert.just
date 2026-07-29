@@ -49,3 +49,11 @@ models-offline:
     root="$(git rev-parse --show-toplevel)"
     chmod +x "$root/scripts/convert_models.sh"
     SKIP_DOWNLOAD=1 "$root/scripts/convert_models.sh"
+
+# Bake CustomVoice preset embeddings into models/presets/ (maintainer only).
+presets:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    chmod +x "$root/scripts/bake_presets.sh"
+    "$root/scripts/bake_presets.sh"

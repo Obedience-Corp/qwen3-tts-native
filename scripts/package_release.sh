@@ -43,6 +43,10 @@ fi
 cp "$models/qwen3-tts-0.6b-f16.gguf" "$dist/models/"
 cp "$models/qwen3-tts-tokenizer-f16.gguf" "$dist/models/"
 [[ -f "$models/install.fragment.json" ]] && cp "$models/install.fragment.json" "$dist/models/"
+if [[ -d "$models/presets" ]]; then
+  mkdir -p "$dist/models/presets"
+  cp -R "$models/presets/." "$dist/models/presets/"
+fi
 
 # Full install.json Samantha ensure will consume (paths relative to install root)
 if command -v shasum >/dev/null 2>&1; then
@@ -76,6 +80,7 @@ cat > "$dist/install.json" <<EOF
       "tokenizer": {"path": "models/qwen3-tts-tokenizer-f16.gguf", "sha256": "$hash_tok"}
     }
   },
+  "presets": "models/presets/presets.json",
   "user_install": "Downloaded and verified by Samantha models ensure / Obey Voice onboarding — users do not run just or convert."
 }
 EOF

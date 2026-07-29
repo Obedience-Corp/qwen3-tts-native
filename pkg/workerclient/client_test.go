@@ -1,4 +1,4 @@
-package harness
+package workerclient
 
 import (
 	"encoding/binary"

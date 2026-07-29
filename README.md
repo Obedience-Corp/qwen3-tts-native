@@ -1,104 +1,108 @@
 # qwen3-tts-native
 
-**Private** (Obedience Corp). Native packaging and harness for **Qwen3-TTS**
-inference with **no Python at runtime**.
+**Native Qwen3-TTS runtime** — GGUF + C++/Metal engine, long-lived worker,
+frozen binary PCM protocol, CustomVoice-class presets. **No Python at
+inference.**
 
 | | |
 |---|---|
 | Org | [Obedience-Corp](https://github.com/Obedience-Corp) |
-| Repo | [qwen3-tts-native](https://github.com/Obedience-Corp/qwen3-tts-native) |
-| Campaign | My_Tools → `projects/qwen3-tts-native` |
-| Design | Campaign `workflow/design/samantha-native-qwen-tts/` (`WI-1a04ee`) |
-| Integration target | [samantha](https://github.com/lancekrogers/samantha) (later adapter) |
+| Module | `github.com/Obedience-Corp/qwen3-tts-native` |
+| Engine | pinned [qwen3-tts.cpp](https://github.com/predict-woo/qwen3-tts.cpp) (fork if needed) |
 
-## Why this repo exists
+This repository is **generically useful on its own**: package a release, install
+it under any path, talk to `qwen3-tts-worker` from any language. Voice products
+(e.g. Samantha, Obey Voice) are **optional integrators**, not the product
+definition.
 
-Samantha has a lot of concurrent product work. Native Qwen (GGML / C++, GGUF
-assets, latency/parity) is isolated here so engine churn does not block the
-main agent tree.
+## What you get
 
-**Hard rule:** Python may appear only in **offline** conversion / golden
-fixtures. Inference and the shipped CLI/worker must not require a Python
-interpreter.
+| Artifact | Role |
+|----------|------|
+| **Release tarball** | Binaries + GGUF + presets + `install.json` hashes |
+| **`qwen3-tts-worker`** | Warm process, JSONL control + raw f32le PCM |
+| **`pkg/install`** | Go: download/verify/extract tarball |
+| **`pkg/workerclient`** | Go: protocol client |
+| **`cmd/qwen3-tts-ensure`** | CLI installer for any host |
+| **CLI** | Lab one-shot WAV only |
 
-## Scope
+Hard rule: Python may appear only in **offline** conversion. Runtime paths
+must not require a Python interpreter.
 
-**In (required — not “later”)**
+## Quick start (consumer)
 
-- Pin and build [qwen3-tts.cpp](https://github.com/predict-woo/qwen3-tts.cpp) (**fork** if product needs patches)
-- GGUF for **0.6B + 1.7B** (+ quant when gated); offline Python convert OK
-- **Streaming** long-lived worker (PCM before utterance ends) + soft cancel
-- **CustomVoice-class presets** + clone path with **embedding cache**
-- Binary PCM protocol; CLI is lab/debug only
-- Latency/parity benches (TTFA ≪ full wall proof)
-- Go harness; **cgo/lib** if IPC benches say so
-- Release artifacts: binaries + manifests/hashes
+```bash
+# 1) Install a published (or local) release package
+go run ./cmd/qwen3-tts-ensure \
+  -dir ~/.local/share/qwen3-tts \
+  -url file:///path/to/qwen3-tts-native-…-darwin-arm64.tar.gz
 
-**Out**
+# 2) Smoke via Go client
+export QWEN_WORKER=~/.local/share/qwen3-tts/bin/qwen3-tts-worker
+export QWEN_MODELS=~/.local/share/qwen3-tts/models
+export DYLD_LIBRARY_PATH=~/.local/share/qwen3-tts/bin   # macOS
+go run ./cmd/worker-smoke
+```
 
-- Samantha TUI, brain, Kokoro, serve, personas (live in `samantha`)
-- Managed uv/torch install trees
-- Pure-Go reimplementation of transformer kernels
-- Product cutover that is Base-only / whole-WAV CLI / no stream
+Protocol: [docs/PROTOCOL.md](docs/PROTOCOL.md)  
+Integration guide: [docs/INTEGRATION.md](docs/INTEGRATION.md)  
+Distribution: [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md)
 
-## Layout (initial)
+## Quick start (maintainer / this checkout)
+
+```bash
+just                         # list recipes
+ENGINE_SHA=<sha> just engine pin
+just engine build
+just engine worker
+just convert models          # offline HF → GGUF (Python OK here only)
+# bake presets if needed
+just harness test
+just harness smoke
+just release package         # dist/*.tar.gz
+```
+
+## Layout
 
 ```text
 .
 ├── README.md
-├── AGENTS.md
-├── justfile                 # root: modules + default list
-├── .justfiles/              # modular recipe groups
-│   ├── dev.just             # imported flat (status, rules)
-│   ├── engine.just          # just engine …
-│   ├── convert.just         # just convert … (offline Python OK)
-│   ├── harness.just         # just harness …
-│   ├── bench.just           # just bench …
-│   └── release.just         # just release …
-├── .gitignore
+├── go.mod                   # module root (pkg + cmd)
+├── pkg/
+│   ├── install/             # Ensure / Inspect tarball installs
+│   └── workerclient/        # protocol client
+├── cmd/
+│   ├── qwen3-tts-ensure/
+│   ├── worker-smoke/
+│   └── worker-bench/
+├── tools/                   # worker_main.c, extract_embedding.c
+├── scripts/                 # convert, package, bake presets
 ├── docs/
-├── scripts/
-├── harness/
-└── third_party/             # engine pin — Wave 1
+├── examples/shell/
+├── .justfiles/              # modular just recipes
+└── third_party/             # engine pin (not committed weights)
 ```
 
 ## Status
 
-**Active lab (festival SN0001).** Stage-A warm worker + Go harness smoke green
-(`just harness test` / `just harness smoke`). Engine pin + 0.6B package path work;
-1.7B blocked on upstream context; true PCM stream is stage B.
+- **Stage A:** warm worker, whole-utterance PCM after synth, soft cancel between
+  requests, 0.6B package + presets, Go ensure + client.
+- **Stage B (planned):** mid-synth PCM stream + mid-synth cancel.
+- **1.7B:** may be blocked on engine context; fail closed if tier requested but
+  absent.
 
-## Users vs maintainers
+## Optional integrators
 
-| Who | How they get native Qwen |
-|-----|---------------------------|
-| **End users** | Samantha Settings / `models ensure` downloads a **release tarball** — no `just`, no Python, no convert |
-| **Maintainers / CI** | `just` recipes below build, convert, and package that tarball |
+Hosts that consume this package (non-exhaustive):
 
-See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+- **Samantha** — `tts_provider=qwen3-tts`, models ensure → install root
+- **Obey Voice** / other agents — same tarball + protocol
 
-## Maintainer commands (`just`)
+Integration must not assume Samantha config keys or TUI. Use `install.json`,
+`pkg/install`, and PROTOCOL.md only.
 
-```bash
-just                 # list root + modules
-just status          # git + layout
-just engine          # pin / build / clean
-just convert         # offline HF → GGUF (Python OK here only)
-just release package # dist/*.tar.gz + install.json for product download
-just bench smoke     # CLI WAV check after convert
-just harness test    # Go unit tests (no model load)
-just harness smoke   # stage-A worker protocol E2E → 24 kHz WAV
+## License / models
 
-ENGINE_SHA=<sha> just engine pin
-just engine build
-just convert models
-just harness smoke
-just release package
-```
-
-## Integration path (later)
-
-1. Stabilize CLI/worker + GGUF pins here.
-2. Publish private release assets (or submodule ref) Samantha can download.
-3. Samantha: `tts.Provider` + `models ensure` for **native** assets only.
-4. Remove managed Python Qwen path from Samantha product surface.
+Engine and model licenses follow upstream Qwen / qwen3-tts.cpp (typically
+Apache-2.0 for code; check model cards for weights). Do not commit multi‑GB
+GGUF blobs to git.

@@ -1,7 +1,7 @@
 /* qwen3-tts-worker — long-lived JSONL control + binary PCM (stage A).
- * Maintainer-built into release tarball. Users get it via Samantha ensure.
+ * Shipped in the release tarball; hosts install via qwen3-tts-ensure / pkg/install.
  *
- * Protocol (v1 draft):
+ * Protocol (v1):
  *   stdin  JSON lines: {"type":"synthesize","id":"...","text":"...","preset":"Vivian"|null,"ref_wav":null}
  *                       {"type":"cancel","id":"..."}
  *                       {"type":"shutdown"}

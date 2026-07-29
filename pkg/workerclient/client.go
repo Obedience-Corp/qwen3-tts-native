@@ -1,6 +1,6 @@
-// Package harness is a Go client for qwen3-tts-worker protocol v1.
+// Package workerclient is a Go client for qwen3-tts-worker protocol v1.
 // Stage A: whole-utterance PCM after synth. Stage B will stream multiple pcm_meta chunks.
-package harness
+package workerclient
 
 import (
 	"bufio"
@@ -17,10 +17,10 @@ import (
 	"time"
 )
 
-// ProtocolID is the frozen control-plane version for Samantha adapter.
+// ProtocolID is the frozen control-plane version for host applications.
 const ProtocolID = "qwen3-tts-worker/v1"
 
-// Client talks to bin/qwen3-tts-worker (product entrypoint for Samantha ensure installs).
+// Client talks to bin/qwen3-tts-worker (product entrypoint after package install).
 type Client struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser

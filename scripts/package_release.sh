@@ -136,7 +136,7 @@ cat > "$dist/install.json" <<EOF
   },
   "presets": "models/presets/presets.json",
   "presets_sha256": "$hash_presets",
-  "user_install": "Downloaded and verified by Samantha models ensure / Obey Voice onboarding — users do not run just or convert."
+  "user_install": "Host apps download and verify this tarball (e.g. qwen3-tts-ensure or pkg/install). End users do not run just or convert."
 }
 EOF
 

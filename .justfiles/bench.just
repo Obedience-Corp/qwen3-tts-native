@@ -51,7 +51,7 @@ cancel:
       echo "Missing worker binary" >&2
       exit 1
     fi
-    (cd "$root/harness" && go run ./cmd/worker-bench)
+    (cd "$root" && go run ./cmd/worker-bench)
     # cancel is asserted inside worker-bench (soft_cancel_between_requests_ok)
     echo "cancel recipe green"
 
@@ -71,7 +71,7 @@ latency:
       echo "Missing worker — build tools/worker_main.c → build/qwen3-tts-worker" >&2
       exit 1
     fi
-    (cd "$root/harness" && go run ./cmd/worker-bench)
+    (cd "$root" && go run ./cmd/worker-bench)
     # Promote summary into docs (small JSON, OK to commit)
     cp "$QWEN_BENCH_JSON" "$root/docs/latency/worker_warmish.json"
     # Update native baseline status pointer

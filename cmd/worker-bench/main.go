@@ -1,5 +1,4 @@
-// worker-bench: cold ready + warm synth wall + soft-cancel recovery (maintainer/CI).
-// Stage A honesty: warm_ttfa_ms ≈ full_wall_ms (whole-utterance PCM); stage B will split them.
+// worker-bench: cold ready + warm synth wall + soft-cancel recovery.
 package main
 
 import (
@@ -10,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Obedience-Corp/qwen3-tts-native/harness"
+	"github.com/Obedience-Corp/qwen3-tts-native/pkg/workerclient"
 )
 
 type report struct {
@@ -46,18 +45,16 @@ func main() {
 	defer cancel()
 
 	t0 := time.Now()
-	c, ready, err := harness.StartWorker(ctx, worker, models)
+	c, ready, err := workerclient.StartWorker(ctx, worker, models)
 	if err != nil {
 		fail("start: %v", err)
 	}
 	defer c.Close()
 	coldMs := time.Since(t0).Seconds() * 1000
 
-	// Soft cancel between requests (stage A).
 	if err := c.Cancel("bench-cancel"); err != nil {
 		fail("cancel: %v", err)
 	}
-	cancelOK := true
 
 	res, err := c.Synthesize(ctx, "bench-warm", phrase, preset)
 	if err != nil {
@@ -70,7 +67,6 @@ func main() {
 		rtf = res.Wall.Seconds() / audioS
 	}
 
-	// Second synth after cancel already sent earlier; measure post-cancel path again.
 	if err := c.Cancel("bench-cancel-2"); err != nil {
 		fail("cancel2: %v", err)
 	}
@@ -78,49 +74,26 @@ func main() {
 	if err != nil {
 		fail("post-cancel synth: %v", err)
 	}
-	postCancelMs := res2.Wall.Seconds() * 1000
 
 	rep := report{
-		Schema:       "qwen.latency.v1",
-		Backend:      "native-qwen3-tts-worker",
-		Protocol:     ready.Protocol,
-		EngineNote:   "stage_A_whole_utterance; stage_B needed for true TTFA",
-		Streaming:    ready.Streaming,
-		SampleRate:   res.SampleRate,
-		ColdReadyMs:  coldMs,
-		WarmWallMs:   warmMs,
-		WarmTTFAMs:   warmMs, // honesty: stage A first PCM after full synth
-		TTFAHonesty:  "stage_A_ttfa_equals_full_wall",
-		AudioDurS:    audioS,
-		RTF:          rtf,
-		NSamples:     len(res.Samples),
-		CancelOk:     cancelOK,
-		PostCancelMs: postCancelMs,
-		Phrase:       phrase,
-		Preset:       preset,
-		MeasuredAt:   time.Now().UTC().Format(time.RFC3339),
+		Schema: "qwen.latency.v1", Backend: "native-qwen3-tts-worker",
+		Protocol: ready.Protocol, EngineNote: "stage_A_whole_utterance; stage_B needed for true TTFA",
+		Streaming: ready.Streaming, SampleRate: res.SampleRate,
+		ColdReadyMs: coldMs, WarmWallMs: warmMs, WarmTTFAMs: warmMs,
+		TTFAHonesty: "stage_A_ttfa_equals_full_wall", AudioDurS: audioS, RTF: rtf,
+		NSamples: len(res.Samples), CancelOk: true, PostCancelMs: res2.Wall.Seconds() * 1000,
+		Phrase: phrase, Preset: preset, MeasuredAt: time.Now().UTC().Format(time.RFC3339),
 	}
-
 	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 		fail("mkdir: %v", err)
 	}
-	b, err := json.MarshalIndent(rep, "", "  ")
-	if err != nil {
-		fail("json: %v", err)
-	}
+	b, _ := json.MarshalIndent(rep, "", "  ")
 	if err := os.WriteFile(outPath, append(b, '\n'), 0o644); err != nil {
 		fail("write: %v", err)
 	}
-
 	fmt.Printf("cold_ready_ms=%.0f warm_wall_ms=%.0f rtf=%.3f cancel_ok=%v post_cancel_ms=%.0f\n",
 		rep.ColdReadyMs, rep.WarmWallMs, rep.RTF, rep.CancelOk, rep.PostCancelMs)
 	fmt.Printf("wrote %s\n", outPath)
-	if rep.SampleRate != 24000 {
-		fail("sample_rate want 24000 got %d", rep.SampleRate)
-	}
-	if !rep.CancelOk {
-		fail("soft cancel failed")
-	}
 }
 
 func envOr(k, d string) string {

@@ -1,5 +1,4 @@
-// worker-smoke: end-to-end stage-A protocol check (maintainer/CI).
-// Usage (from repo root): just harness smoke
+// worker-smoke: end-to-end stage-A protocol check (maintainer/CI or any host).
 package main
 
 import (
@@ -9,34 +8,24 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Obedience-Corp/qwen3-tts-native/harness"
+	"github.com/Obedience-Corp/qwen3-tts-native/pkg/workerclient"
 )
 
 func main() {
 	root := os.Getenv("QWEN_ROOT")
 	if root == "" {
-		// Prefer git toplevel when launched via just; fall back to cwd.
 		if wd, err := os.Getwd(); err == nil {
 			root = wd
 		}
 	}
-	worker := os.Getenv("QWEN_WORKER")
-	if worker == "" {
-		worker = filepath.Join(root, "build", "qwen3-tts-worker")
-	}
-	models := os.Getenv("QWEN_MODELS")
-	if models == "" {
-		models = filepath.Join(root, "models")
-	}
-	out := os.Getenv("QWEN_SMOKE_WAV")
-	if out == "" {
-		out = filepath.Join(root, "harness", "artifacts", "harness_vivian.wav")
-	}
+	worker := envOr("QWEN_WORKER", filepath.Join(root, "build", "qwen3-tts-worker"))
+	models := envOr("QWEN_MODELS", filepath.Join(root, "models"))
+	out := envOr("QWEN_SMOKE_WAV", filepath.Join(root, "artifacts", "harness_vivian.wav"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	c, ready, err := harness.StartWorker(ctx, worker, models)
+	c, ready, err := workerclient.StartWorker(ctx, worker, models)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "start: %v\n", err)
 		os.Exit(1)
@@ -44,7 +33,6 @@ func main() {
 	defer c.Close()
 	fmt.Printf("ready protocol=%s rate=%d streaming=%v\n", ready.Protocol, ready.SampleRate, ready.Streaming)
 
-	// Soft cancel between requests (stage A) — should not kill the process.
 	if err := c.Cancel("pre-smoke"); err != nil {
 		fmt.Fprintf(os.Stderr, "cancel: %v\n", err)
 		os.Exit(1)
@@ -55,23 +43,25 @@ func main() {
 		fmt.Fprintf(os.Stderr, "synth: %v\n", err)
 		os.Exit(1)
 	}
-	if res.SampleRate != 24000 {
-		fmt.Fprintf(os.Stderr, "expected 24000 Hz, got %d\n", res.SampleRate)
+	if res.SampleRate != 24000 || len(res.Samples) < 1000 {
+		fmt.Fprintf(os.Stderr, "bad pcm rate=%d n=%d\n", res.SampleRate, len(res.Samples))
 		os.Exit(1)
 	}
-	if len(res.Samples) < 1000 {
-		fmt.Fprintf(os.Stderr, "suspiciously short pcm: %d samples\n", len(res.Samples))
-		os.Exit(1)
-	}
-
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "mkdir: %v\n", err)
 		os.Exit(1)
 	}
-	if err := harness.WriteWAV16(out, res.SampleRate, res.Samples); err != nil {
+	if err := workerclient.WriteWAV16(out, res.SampleRate, res.Samples); err != nil {
 		fmt.Fprintf(os.Stderr, "wav: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("wrote %s samples=%d rate=%d wall_ms=%.0f\n",
 		out, len(res.Samples), res.SampleRate, res.Wall.Seconds()*1000)
+}
+
+func envOr(k, d string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return d
 }

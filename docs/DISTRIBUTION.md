@@ -1,48 +1,54 @@
 # Distribution model (users ≠ maintainers)
 
-## Users (Samantha / Obey Voice)
+This package is for **any host app** that wants native Qwen3-TTS without
+shipping Python.
 
-End users **never**:
+## End users of a host product
+
+They **never**:
 
 - run `just`
 - install Python / torch
 - convert GGUF
 - build CMake
 
-They **only**:
+They **only** receive a prebuilt tree via the host’s ensure/onboarding
+(or manual unpack of the release tarball).
 
-1. Pick Qwen TTS in Settings (or enable via config)
-2. Let **Samantha `models ensure --tts`** (or Obey onboarding) download a
-   **prebuilt release tarball**
-3. App verifies `install.json` + SHA-256, unpacks under `models_dir/qwen3-tts/`
+## Install layout (generic)
 
-Install layout after ensure (product):
+Any install root (examples: `~/.local/share/qwen3-tts`,
+`models_dir/qwen3-tts`, `./vendor/qwen3-tts`):
 
 ```text
-models_dir/qwen3-tts/
+<install-root>/
   install.json
   SHA256SUMS
-  bin/qwen3-tts-worker       # product entrypoint (JSONL + PCM)
-  bin/qwen3-tts-cli          # lab/debug only
-  bin/libqwen3tts*.dylib
+  bin/qwen3-tts-worker
+  bin/qwen3-tts-cli
+  bin/libqwen3tts*
   models/*.gguf
   models/presets/*.q3te
   models/presets/presets.json
-  cache/speaker-embeddings/  # runtime clone cache (created by app)
+  cache/speaker-embeddings/   # host-managed optional
+```
+
+Install with:
+
+```bash
+qwen3-tts-ensure -dir <install-root> -url <tar.gz> -sha256 <hex>
+# or Go: install.Ensure(...)
 ```
 
 ## Maintainers / CI (this repo)
 
 ```text
-just engine pin && just engine build   # produce CLI + lib
-just engine worker                     # build/qwen3-tts-worker
-just convert models                    # offline HF → GGUF (Python OK here)
-# bake presets if needed
-just release package                   # dist/*.tar.gz + install.json + SHA256SUMS
-# attach tarball to GitHub Release (private org OK)
+just engine pin && just engine build
+just engine worker
+just convert models          # offline Python OK
+just release package         # dist/*.tar.gz + install.json + SHA256SUMS
+# publish tarball + checksums for host apps to download
 ```
-
-Samantha’s ensure job then points at that release URL + expected hashes.
 
 ## Release artifact
 
@@ -50,37 +56,25 @@ Samantha’s ensure job then points at that release URL + expected hashes.
 
 `dist/qwen3-tts-native-<gitshort>-<os>-<arch>.tar.gz`
 
-Containing:
-
 | Path | Purpose |
 |------|---------|
 | `install.json` | schema `qwen3-tts-native.install.v1` + per-file SHA-256 |
-| `SHA256SUMS` | full tree checksums for ensure |
+| `SHA256SUMS` | full tree checksums |
 | `bin/qwen3-tts-worker` | **required** product binary |
 | `bin/qwen3-tts-cli` | lab smoke |
-| `bin/libqwen3tts*.dylib` | shared lib (`@loader_path`) |
-| `models/*.gguf` | 0.6B tier + tokenizer |
-| `models/presets/*` | baked CustomVoice-class embeddings |
+| `bin/libqwen3tts*` | shared lib (`@loader_path`) |
+| `models/*` | GGUF + presets |
 
-## Not for v1 user path
+## Host runtime
 
-- Running convert on laptop as setup
-- Documenting `just` as the install story in Samantha README
-
-## Binaries in the tarball
-
-| Binary | Role |
-|--------|------|
-| `bin/qwen3-tts-cli` | Lab/debug one-shot WAV |
-| `bin/qwen3-tts-worker` | Product long-lived process (JSONL + PCM) |
-| `bin/libqwen3tts*.dylib` | Shared lib for worker/cgo |
-
-Samantha should launch **worker**, not CLI, for conversation.
+Launch **worker** with `models/` as argv; speak [PROTOCOL.md](PROTOCOL.md).
+Do not use CLI per turn for interactive products.
 
 ## install.json fields (v1)
 
-- `bin.worker` / `bin.worker_sha256` — product entrypoint
-- `bin.lib` / `bin.lib_sha256` — shared library
+- `bin.worker` / `bin.worker_sha256`
+- `bin.lib` / `bin.lib_sha256`
 - `protocol`: `qwen3-tts-worker/v1`
 - `streaming`: `false` until stage B
 - `presets` + `presets_sha256`
+- `models.<tier>.tts|tokenizer` paths + hashes

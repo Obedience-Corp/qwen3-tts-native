@@ -31,8 +31,10 @@ models_dir/qwen3-tts/
 ## Maintainers / CI (this repo)
 
 ```text
-just engine pin && just engine build   # produce binaries
+just engine pin && just engine build   # produce CLI + shared library
+just engine worker                     # produce long-lived protocol worker
 just convert models                    # offline HF → GGUF (Python OK here)
+just convert presets                   # bake shippable speaker embeddings
 just release package                   # dist/*.tar.gz + install.json
 # attach tarball to GitHub Release (private org OK)
 ```
@@ -58,6 +60,9 @@ Containing `install.json` (schema `qwen3-tts-native.install.v1`) and SHA256SUMS.
 |--------|------|
 | `bin/qwen3-tts-cli` | Lab/debug one-shot WAV |
 | `bin/qwen3-tts-worker` | Product long-lived process (JSONL + PCM) |
-| `bin/libqwen3tts*.dylib` | Shared lib for worker/cgo |
+| `bin/libqwen3tts.*` | Shared library for worker/cgo (`.so*` on Linux, `.dylib*` on macOS) |
+| `bin/libggml*` | GGML runtime/backend libraries when the engine build is dynamic |
 
 Samantha should launch **worker**, not CLI, for conversation.
+On Linux, its launcher sets `LD_LIBRARY_PATH` to the installed `bin/` directory
+and `QWEN3_TTS_BACKEND=cuda` when CUDA was selected.

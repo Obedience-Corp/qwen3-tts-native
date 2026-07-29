@@ -64,7 +64,9 @@ interpreter.
 
 ## Status
 
-**Scaffold only.** Wave 0–1 from design `WI-1a04ee` not started in this tree yet.
+The pinned native engine, worker protocol, release packaging, and platform
+validation harness are present. Platform evidence and remaining implementation
+status are tracked in [docs/PLATFORMS.md](docs/PLATFORMS.md).
 
 ## Users vs maintainers
 
@@ -87,7 +89,11 @@ just bench smoke     # CLI WAV check after convert
 
 ENGINE_SHA=<sha> just engine pin
 just engine build
+just engine worker
 just convert models
+just convert presets
+just harness test
+just bench platform-cuda
 just release package
 ```
 

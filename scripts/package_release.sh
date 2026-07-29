@@ -6,7 +6,6 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 engine="$root/third_party/qwen3-tts.cpp"
 cli="$engine/build/qwen3-tts-cli"
-lib="$engine/build/libqwen3tts.dylib"
 models="$root/models"
 
 if [[ ! -x "$cli" ]]; then
@@ -15,6 +14,22 @@ if [[ ! -x "$cli" ]]; then
 fi
 if [[ ! -f "$models/qwen3-tts-0.6b-f16.gguf" || ! -f "$models/qwen3-tts-tokenizer-f16.gguf" ]]; then
   echo "Missing GGUF — convert first (maintainer: just convert models)" >&2
+  exit 1
+fi
+worker="$root/build/qwen3-tts-worker"
+if [[ ! -x "$worker" ]]; then
+  echo "Missing worker — build it first (maintainer: just engine worker)" >&2
+  exit 1
+fi
+if [[ ! -f "$models/presets/presets.json" ]] || ! compgen -G "$models/presets/*.q3te" >/dev/null; then
+  echo "Missing baked presets — run: just convert presets" >&2
+  exit 1
+fi
+
+shopt -s nullglob
+qwen_libs=("$engine/build"/libqwen3tts.so* "$engine/build"/libqwen3tts*.dylib*)
+if (( ${#qwen_libs[@]} == 0 )); then
+  echo "Missing libqwen3tts shared library — build engine first" >&2
   exit 1
 fi
 
@@ -31,27 +46,29 @@ mkdir -p "$dist/bin" "$dist/models"
 
 cp "$cli" "$dist/bin/qwen3-tts-cli"
 chmod +x "$dist/bin/qwen3-tts-cli"
-worker="$root/build/qwen3-tts-worker"
-if [[ -x "$worker" ]]; then
-  cp "$worker" "$dist/bin/qwen3-tts-worker"
-  chmod +x "$dist/bin/qwen3-tts-worker"
-fi
-if [[ -f "$lib" ]]; then
-  cp "$lib" "$dist/bin/"
-  # copy real dylib if symlink
-  if [[ -L "$lib" ]]; then
-    real="$(cd "$(dirname "$lib")" && readlink "$lib")"
-    [[ -f "$(dirname "$lib")/$real" ]] && cp "$(dirname "$lib")/$real" "$dist/bin/" || true
+cp "$worker" "$dist/bin/qwen3-tts-worker"
+chmod +x "$dist/bin/qwen3-tts-worker"
+cp -a "${qwen_libs[@]}" "$dist/bin/"
+
+# Linux GGML builds use shared backend libraries. Keep them beside the worker;
+# product launchers set LD_LIBRARY_PATH to this bin directory.
+if [[ "$os" == "linux" ]]; then
+  ggml_libs=(
+    "$engine/ggml/build/src"/libggml*.so*
+    "$engine/ggml/build/src/ggml-cuda"/libggml*.so*
+  )
+  if (( ${#ggml_libs[@]} == 0 )); then
+    echo "Missing GGML shared libraries — rebuild engine with the repository recipe" >&2
+    exit 1
   fi
+  cp -a "${ggml_libs[@]}" "$dist/bin/"
 fi
 
 cp "$models/qwen3-tts-0.6b-f16.gguf" "$dist/models/"
 cp "$models/qwen3-tts-tokenizer-f16.gguf" "$dist/models/"
 [[ -f "$models/install.fragment.json" ]] && cp "$models/install.fragment.json" "$dist/models/"
-if [[ -d "$models/presets" ]]; then
-  mkdir -p "$dist/models/presets"
-  cp -R "$models/presets/." "$dist/models/presets/"
-fi
+mkdir -p "$dist/models/presets"
+cp -R "$models/presets/." "$dist/models/presets/"
 
 # Full install.json Samantha ensure will consume (paths relative to install root)
 if command -v shasum >/dev/null 2>&1; then
@@ -62,6 +79,11 @@ else
   hash_cli="$(sha256sum "$dist/bin/qwen3-tts-cli" | awk '{print $1}')"
   hash_tts="$(sha256sum "$dist/models/qwen3-tts-0.6b-f16.gguf" | awk '{print $1}')"
   hash_tok="$(sha256sum "$dist/models/qwen3-tts-tokenizer-f16.gguf" | awk '{print $1}')"
+fi
+if command -v shasum >/dev/null 2>&1; then
+  hash_worker="$(shasum -a 256 "$dist/bin/qwen3-tts-worker" | awk '{print $1}')"
+else
+  hash_worker="$(sha256sum "$dist/bin/qwen3-tts-worker" | awk '{print $1}')"
 fi
 
 cat > "$dist/install.json" <<EOF
@@ -77,7 +99,9 @@ cat > "$dist/install.json" <<EOF
   "bin": {
     "cli": "bin/qwen3-tts-cli",
     "cli_sha256": "$hash_cli",
-    "worker": "bin/qwen3-tts-worker"
+    "worker": "bin/qwen3-tts-worker",
+    "worker_sha256": "$hash_worker",
+    "library_dir": "bin"
   },
   "models": {
     "0.6b": {
@@ -91,7 +115,11 @@ cat > "$dist/install.json" <<EOF
 }
 EOF
 
-(cd "$dist" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS)
+if command -v shasum >/dev/null 2>&1; then
+  (cd "$dist" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS)
+else
+  (cd "$dist" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+fi
 
 (cd "$root/dist" && tar -czf "${name}.tar.gz" "$name")
 echo "Packaged: $root/dist/${name}.tar.gz"

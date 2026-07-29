@@ -33,6 +33,28 @@ smoke:
     fi
     ls -lh "$out"
 
+# Worker protocol smoke; skips cleanly when worker/models/presets are absent.
+platform:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    "$root/scripts/smoke_platform.sh"
+
+# Worker protocol smoke; missing prerequisites are failures.
+platform-strict:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    REQUIRE_PLATFORM_SMOKE=1 "$root/scripts/smoke_platform.sh"
+
+# Strict worker smoke that requires NVIDIA CUDA and rejects CPU fallback.
+platform-cuda:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 QWEN3_TTS_BACKEND=cuda \
+      "$root/scripts/smoke_platform.sh"
+
 # Record cold/warm/TTFA metrics (Wave 0+).
 # Design: campaign workflow/design/samantha-native-qwen-tts/latency.md
 latency:

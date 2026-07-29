@@ -3,7 +3,7 @@
 default:
     @just --list --justfile {{source_file()}}
 
-# Initialize Go module under harness/ if missing.
+# Initialize Go module under harness/ if missing (normally already committed).
 init:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -16,7 +16,7 @@ init:
       echo "harness/go.mod already present"
     fi
 
-# Build harness binaries (when packages exist).
+# Build the platform smoke driver.
 build:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -25,13 +25,11 @@ build:
       echo "No harness module — run: just harness init"
       exit 1
     fi
-    if compgen -G "$root/harness/**/*.go" > /dev/null || compgen -G "$root/harness/*.go" > /dev/null; then
-      (cd "$root/harness" && go build ./...)
-    else
-      echo "No Go packages under harness/ yet"
-    fi
+    mkdir -p "$root/build"
+    (cd "$root/harness" && go build -o "$root/build/platform-smoke" ./cmd/platform-smoke)
+    echo "Built $root/build/platform-smoke"
 
-# Unit tests for harness packages.
+# Unit tests plus the platform smoke skip/strict contract.
 test:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -40,8 +38,5 @@ test:
       echo "No harness module — run: just harness init"
       exit 1
     fi
-    if compgen -G "$root/harness/**/*_test.go" > /dev/null || compgen -G "$root/harness/*_test.go" > /dev/null; then
-      (cd "$root/harness" && go test ./...)
-    else
-      echo "No harness tests yet"
-    fi
+    (cd "$root/harness" && go test ./...)
+    bash "$root/scripts/smoke_platform_test.sh"

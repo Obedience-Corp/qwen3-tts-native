@@ -1,0 +1,20 @@
+{
+  "schema": "qwen.latency.v1",
+  "backend": "native-qwen3-tts-worker",
+  "protocol": "qwen3-tts-worker/v1",
+  "engine_note": "stage_A_whole_utterance; stage_B needed for true TTFA",
+  "streaming": false,
+  "sample_rate": 24000,
+  "cold_ready_ms": 6090.142334,
+  "warm_wall_ms": 5021.276375,
+  "warm_ttfa_ms": 5021.276375,
+  "ttfa_honesty": "stage_A_ttfa_equals_full_wall",
+  "audio_duration_s": 3.656875,
+  "rtf": 1.373105828063579,
+  "n_samples": 87765,
+  "soft_cancel_between_requests_ok": true,
+  "post_cancel_synth_wall_ms": 2552.248167,
+  "phrase": "Hello from the native warm worker latency bench.",
+  "preset": "Vivian",
+  "measured_at": "2026-07-29T06:31:37Z"
+}

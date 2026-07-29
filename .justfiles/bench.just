@@ -33,16 +33,73 @@ smoke:
     fi
     ls -lh "$out"
 
-# Record cold/warm/TTFA metrics (Wave 0+).
-# Design: campaign workflow/design/samantha-native-qwen-tts/latency.md
+# Worker protocol smoke (delegates to harness).
+worker-smoke:
+    just harness smoke
+
+# Soft-cancel between requests then successful synth (stage A).
+cancel:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    export QWEN_ROOT="$root"
+    export QWEN_WORKER="$root/build/qwen3-tts-worker"
+    export QWEN_MODELS="$root/models"
+    export DYLD_LIBRARY_PATH="$root/build${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+    export LD_LIBRARY_PATH="$root/build${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    if [[ ! -x "$QWEN_WORKER" ]]; then
+      echo "Missing worker binary" >&2
+      exit 1
+    fi
+    (cd "$root/harness" && go run ./cmd/worker-bench)
+    # cancel is asserted inside worker-bench (soft_cancel_between_requests_ok)
+    echo "cancel recipe green"
+
+# Warm-worker latency JSON (qwen.latency.v1) under artifacts/latency/.
 latency:
     #!/usr/bin/env bash
     set -euo pipefail
     root="$(git rev-parse --show-toplevel)"
-    mkdir -p "$root/artifacts/latency"
+    mkdir -p "$root/artifacts/latency" "$root/docs/latency"
+    export QWEN_ROOT="$root"
+    export QWEN_WORKER="$root/build/qwen3-tts-worker"
+    export QWEN_MODELS="$root/models"
+    export QWEN_BENCH_JSON="$root/artifacts/latency/worker_warmish.json"
+    export DYLD_LIBRARY_PATH="$root/build${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+    export LD_LIBRARY_PATH="$root/build${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    if [[ ! -x "$QWEN_WORKER" ]]; then
+      echo "Missing worker — build tools/worker_main.c → build/qwen3-tts-worker" >&2
+      exit 1
+    fi
+    (cd "$root/harness" && go run ./cmd/worker-bench)
+    # Promote summary into docs (small JSON, OK to commit)
+    cp "$QWEN_BENCH_JSON" "$root/docs/latency/worker_warmish.json"
+    # Update native baseline status pointer
+    pin="$(grep -E '^ENGINE_SHA=' "$root/docs/ENGINE_PIN.txt" 2>/dev/null | head -1 | cut -d= -f2- || echo unknown)"
+    status="$root/docs/latency/native_baseline_status.json"
+    printf '%s\n' \
+      '{' \
+      '  "schema": "qwen.latency.v1",' \
+      '  "backend": "native-qwen3-tts-worker",' \
+      "  \"engine_sha\": \"$pin\"," \
+      '  "status": "measured_stage_A",' \
+      '  "artifact": "docs/latency/worker_warmish.json",' \
+      '  "note": "Stage A: warm_ttfa_ms equals full wall (whole utterance). Stage B streaming required for L1 TTFA."' \
+      '}' > "$status"
     echo "Write JSON under: $root/artifacts/latency/ (schema qwen.latency.v1)"
     echo "Committed summaries live under docs/latency/"
-    ls -la "$root/docs/latency/" 2>/dev/null || true
+    ls -la "$root/docs/latency/"
+    cat "$root/docs/latency/worker_warmish.json"
+
+# Run all green gates for this sequence (smoke + harness + latency/cancel).
+all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just bench smoke
+    just harness test
+    just harness smoke
+    just bench latency
+    echo "bench all green"
 
 # Compare native output to offline golden fixtures.
 parity:

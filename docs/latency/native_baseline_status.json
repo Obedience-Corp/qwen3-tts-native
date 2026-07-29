@@ -1,7 +1,8 @@
 {
   "schema": "qwen.latency.v1",
-  "backend": "native-qwen3-tts-cpp",
+  "backend": "native-qwen3-tts-worker",
   "engine_sha": "b3ba14077cf1b3e11b86e5f84aa9184605c89b28",
-  "status": "deferred_until_gguf",
-  "note": "CLI built with Metal; models/ GGUF not converted yet. Complete native rows in phase 005 after convert."
+  "status": "measured_stage_A",
+  "artifact": "docs/latency/worker_warmish.json",
+  "note": "Stage A: warm_ttfa_ms equals full wall (whole utterance). Stage B streaming required for L1 TTFA."
 }

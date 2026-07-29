@@ -22,9 +22,9 @@ Conversation cutover needs `warm_ttfa_ms` ≪ `full_wall_ms` (first audible PCM 
 |-------|------|-------------|
 | Engine patch | Emit PCM after each vocoder frame hop / N codes | Maintainer builds into release **binary** |
 | Worker | Binary protocol: `generating` / `pcm` / `final` / soft cancel | Same release tarball `bin/qwen3-tts-worker` |
-| Samantha | Consume stream; progressive sentence feed | App (no just) |
+| Host app | Consume stream; optional progressive sentence feed | Any integrator (no just) |
 
-Users only download the **worker + models** package; they never apply patches.
+End users only download the **worker + models** package via the host; they never apply patches.
 
 ## Implementation stages
 

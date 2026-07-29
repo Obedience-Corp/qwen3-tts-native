@@ -44,12 +44,19 @@ interpreter.
 .
 ├── README.md
 ├── AGENTS.md
-├── justfile
+├── justfile                 # root: modules + default list
+├── .justfiles/              # modular recipe groups
+│   ├── dev.just             # imported flat (status, rules)
+│   ├── engine.just          # just engine …
+│   ├── convert.just         # just convert … (offline Python OK)
+│   ├── harness.just         # just harness …
+│   ├── bench.just           # just bench …
+│   └── release.just         # just release …
 ├── .gitignore
-├── docs/                 # notes, latency artifacts pointers
-├── scripts/              # offline convert, pin, release helpers
-├── harness/              # Go client / protocol tests (later)
-└── third_party/          # engine pin (submodule or vendored) — Wave 1
+├── docs/
+├── scripts/
+├── harness/
+└── third_party/             # engine pin — Wave 1
 ```
 
 ## Status
@@ -59,8 +66,19 @@ interpreter.
 ## Local commands
 
 ```bash
-just            # list recipes
-just status     # git + layout check
+just                 # list root + modules
+just status          # git + layout
+just engine          # list engine recipes
+just convert         # list offline convert recipes
+just harness
+just bench
+just release
+
+# examples (Wave 1+)
+ENGINE_SHA=<sha> just engine pin
+just engine build
+just convert venv
+just bench smoke
 ```
 
 ## Integration path (later)

@@ -29,3 +29,9 @@ needs engine architecture support first.
 ## Users never pick GGUF by hand
 
 Host apps expose tier names if needed; the tarball already contains the files.
+
+## Quant (Q8 / other)
+
+See **[QUANT_GATE.md](QUANT_GATE.md)**. Product default remains **0.6B F16**
+until a quant candidate passes parity + listening. Doctor hosts should warn on
+low system RAM (~&lt;8 GB for 0.6B F16 peak ~3 GB class).

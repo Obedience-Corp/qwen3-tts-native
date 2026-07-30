@@ -11,8 +11,9 @@ extract="$root/build/extract_embedding"
 presets_out="$root/models/presets"
 refs="$root/artifacts/preset_refs"
 
-# Managed Qwen (optional local path for reference generation)
-QROOT="${SAMANTHA_QWEN_ROOT:-$HOME/.cache/festival-voice/models/qwen3-tts}"
+# Optional offline Python CustomVoice install for reference WAV baking only.
+# Not used at product inference. Override with QWEN3_TTS_BAKE_ROOT.
+QROOT="${QWEN3_TTS_BAKE_ROOT:-${QWEN_TTS_BAKE_ROOT:-}}"
 PY="${QROOT}/runtime/qwen-tts-0.1.1/bin/python"
 WORKER="${QROOT}/worker/qwen_worker.py"
 MODEL="${QROOT}/models/customvoice-0.6b/85e237c12c027371202489a0ec509ded67b5e4b5"
@@ -38,9 +39,10 @@ cc -O2 -o "$extract" "$root/tools/extract_embedding.c" \
 mkdir -p "$presets_out" "$refs"
 echo "Baking preset references via managed CustomVoice (offline only)..."
 
-if [[ ! -x "$PY" || ! -f "$WORKER" || ! -d "$MODEL" ]]; then
-  echo "Managed Qwen install not found at $QROOT" >&2
-  echo "Set SAMANTHA_QWEN_ROOT or install managed CustomVoice once for baking." >&2
+if [[ -z "$QROOT" || ! -x "$PY" || ! -f "$WORKER" || ! -d "$MODEL" ]]; then
+  echo "Offline bake root not found (need Python CustomVoice tree for ref WAVs only)." >&2
+  echo "Set QWEN3_TTS_BAKE_ROOT to a local convert/bake tree, or place pre-baked" >&2
+  echo "artifacts under models/presets/ and artifacts/preset_refs/." >&2
   exit 1
 fi
 

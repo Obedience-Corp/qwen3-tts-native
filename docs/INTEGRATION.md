@@ -61,28 +61,26 @@ Any language can implement the client. A small Go helper exists at
 | `0.6b` | Default ship |
 | `1.7b` | Optional; may be absent — fail closed if requested but missing |
 
-## Samantha (and similar hosts)
+## Host app responsibilities
 
-Product config for empty binary/model (managed selection → native package):
+Any product that ships this package should:
 
-| Setting / env | Purpose |
-|---------------|---------|
-| `qwen_tts_native_url` / `SAMANTHA_QWEN_NATIVE_URL` | HTTPS URL of platform tarball |
-| `qwen_tts_native_sha256` / `SAMANTHA_QWEN_NATIVE_SHA256` | Hex digest of the tarball |
-| `qwen_tts_model_tier` | `0.6b` (default) |
-
-Then: `samantha models ensure --tts` unpacks under `models_dir/qwen3-tts`.
+1. Download the platform tarball (or embed it).
+2. Verify the archive SHA-256 (and/or `install.json` + per-file hashes).
+3. Unpack under an app-owned models directory.
+4. Start `bin/qwen3-tts-worker` with the `models/` directory as argv[1].
+5. Never invoke Python/`uv` for inference.
 
 Maintainer publish steps:
 
 ```text
 just release package
-# upload dist/qwen3-tts-native-<git>-<os>-<arch>.tar.gz
-# set host URL + sha256 from shasum -a 256 dist/...tar.gz
+# attach dist/*.tar.gz to a GitHub Release (stable names preferred for hosts):
+#   qwen3-tts-native-<os>-<arch>.tar.gz
+# publish SHA256SUMS or release notes with archive digests
 ```
 
-Ensure must verify `install.json` schema `qwen3-tts-native.install.v1` and
-worker + GGUF hashes (Samantha `internal/qwen` EnsureNative / InspectNative).
+Host installers should accept schema `qwen3-tts-native.install.v1`.
 
 ## Rules
 

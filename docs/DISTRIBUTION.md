@@ -34,15 +34,21 @@ See [PLATFORMS.md](PLATFORMS.md) for macOS / Linux / Windows.
 
 ## Artifact
 
+Build output:
+
 `dist/qwen3-tts-native-<gitshort>-<os>-<arch>.tar.gz`
 
-Verified against Samantha `EnsureNative` / `InspectNative` (schema
-`qwen3-tts-native.install.v1`). Local packaging:
+Recommended **stable release names** (for host defaults / CDN):
+
+`qwen3-tts-native-<os>-<arch>.tar.gz`  
+(e.g. `qwen3-tts-native-darwin-arm64.tar.gz`)
+
+Schema: `qwen3-tts-native.install.v1` inside the archive.
 
 ```bash
 just release package
 shasum -a 256 dist/qwen3-tts-native-*-$(go env GOOS)-$(go env GOARCH).tar.gz
-# Host: qwen_tts_native_url + qwen_tts_native_sha256 → models ensure --tts
+# Publish tarball + digest on a GitHub Release (or CDN)
 ```
 
 | Path | Purpose |

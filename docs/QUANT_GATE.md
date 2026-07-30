@@ -19,12 +19,10 @@
 Until that checklist is green, product packages ship **F16 0.6B only**. Host apps
 must not advertise a quant toggle as ready.
 
-## Host doctor expectations
+## Host expectations
 
-Samantha (and other hosts) should warn when:
+Downstream apps should warn when:
 
 - Selected tier’s **expected warm peak RSS** approaches machine RAM class
   (0.6B F16 ~3 GB peak → warn under ~8 GB system RAM).
 - User selects **1.7B** while the package does not list it as ready.
-
-See Samantha `doctor` `qwen3-tts-ram` diagnostic.

@@ -36,6 +36,15 @@ See [PLATFORMS.md](PLATFORMS.md) for macOS / Linux / Windows.
 
 `dist/qwen3-tts-native-<gitshort>-<os>-<arch>.tar.gz`
 
+Verified against Samantha `EnsureNative` / `InspectNative` (schema
+`qwen3-tts-native.install.v1`). Local packaging:
+
+```bash
+just release package
+shasum -a 256 dist/qwen3-tts-native-*-$(go env GOOS)-$(go env GOARCH).tar.gz
+# Host: qwen_tts_native_url + qwen_tts_native_sha256 → models ensure --tts
+```
+
 | Path | Purpose |
 |------|---------|
 | `install.json` | schema `qwen3-tts-native.install.v1` + hashes |

@@ -120,7 +120,7 @@ platform-cuda:
     REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 QWEN3_TTS_BACKEND=cuda \
       "$root/scripts/smoke_platform.sh"
 
-# Run all green gates for this sequence (smoke + harness + latency/cancel).
+# Run all green gates for this sequence (smoke + harness + latency/cancel + parity).
 all:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -129,11 +129,42 @@ all:
     just harness smoke
     just bench latency
     just bench platform
+    just bench parity
     echo "bench all green"
 
-# Compare native output to offline golden fixtures.
+# Compare native worker output to committed golden suite envelopes
+# (fixtures/golden/suite.v1.json). Requires build/qwen3-tts-worker + models/.
 parity:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "TODO: parity suite vs docs/fixtures or artifacts/golden"
-    exit 1
+    root="$(git rev-parse --show-toplevel)"
+    export QWEN_ROOT="$root"
+    export QWEN_WORKER="${QWEN_WORKER:-$root/build/qwen3-tts-worker}"
+    export QWEN_MODELS="${QWEN_MODELS:-$root/models}"
+    export QWEN_PARITY_SUITE="${QWEN_PARITY_SUITE:-$root/fixtures/golden/suite.v1.json}"
+    export QWEN_PARITY_JSON="${QWEN_PARITY_JSON:-$root/artifacts/parity/report.json}"
+    export DYLD_LIBRARY_PATH="$root/build${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+    export LD_LIBRARY_PATH="$root/build${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    if [[ ! -x "$QWEN_WORKER" ]]; then
+      echo "Missing worker — just engine build" >&2
+      exit 1
+    fi
+    if [[ ! -f "$QWEN_MODELS/qwen3-tts-0.6b-f16.gguf" ]]; then
+      echo "Missing GGUF — just convert models (or install release models/)" >&2
+      exit 1
+    fi
+    mkdir -p "$root/artifacts/parity"
+    (cd "$root" && go run ./cmd/parity-check)
+    echo "parity report: $QWEN_PARITY_JSON"
+
+# Validate suite JSON + optional local golden WAVs (no worker / no synth).
+parity-fixtures:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    export QWEN_ROOT="$root"
+    export QWEN_PARITY_SUITE="${QWEN_PARITY_SUITE:-$root/fixtures/golden/suite.v1.json}"
+    export QWEN_PARITY_JSON="${QWEN_PARITY_JSON:-$root/artifacts/parity/fixtures_report.json}"
+    mkdir -p "$root/artifacts/parity"
+    (cd "$root" && go run ./cmd/parity-check --fixtures-only)
+

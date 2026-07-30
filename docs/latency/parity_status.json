@@ -1,0 +1,10 @@
+{
+  "artifact": "artifacts/parity/report.json",
+  "engine_sha": "b3ba14077cf1b3e11b86e5f84aa9184605c89b28",
+  "failed": 0,
+  "note": "Live native worker vs committed duration/RMS envelopes; optional full WAV goldens under artifacts/preset_refs",
+  "ok": true,
+  "passed": 9,
+  "schema": "qwen.parity.status.v1",
+  "suite": "fixtures/golden/suite.v1.json"
+}

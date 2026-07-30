@@ -82,8 +82,9 @@ just release package
 
 Host installers should accept schema `qwen3-tts-native.install.v1`.
 
-## Rules
+## Notes
 
-1. No Python at inference.
+1. Runtime is the worker binary + GGUF; do not depend on a Python process for
+   synthesis.
 2. Verify `install.json` / SHA-256 before trusting binaries.
 3. Stage A: first audio ≈ full synth wall until streaming (stage B).

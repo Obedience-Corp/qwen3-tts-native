@@ -1,100 +1,99 @@
 # qwen3-tts-native
 
-**Native packaging and runtime for [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)** —
-no Python at inference.
+Native packaging and runtime for [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS).
 
-This is **not** a Go library project. The product is:
-
-1. A **pinned C++ engine** (qwen3-tts.cpp / GGML — Metal on macOS, CUDA/CPU on Linux)
-2. **GGUF model files** + baked speaker presets
-3. A long-lived **`qwen3-tts-worker`** process with a frozen stdin/stdout protocol
-4. A **release tarball** (`install.json` + SHA-256) that apps download and unpack
-
-Go appears only as **thin maintainer tooling** (ensure CLI, smoke/bench, optional
-protocol helper). Hosts can use any language; the contract is the worker +
-[docs/PROTOCOL.md](docs/PROTOCOL.md).
+Ships a **release tarball** host apps download and unpack: a long-lived
+`qwen3-tts-worker`, GGUF models, speaker presets, and `install.json` checksums.
+The runtime is C++/GGML (Metal on macOS, CUDA/CPU on Linux)—not a Python
+service and not a Go library.
 
 | | |
 |---|---|
 | Org | [Obedience-Corp](https://github.com/Obedience-Corp) |
 | Engine | pinned [qwen3-tts.cpp](https://github.com/predict-woo/qwen3-tts.cpp) |
+| Releases | [GitHub Releases](https://github.com/Obedience-Corp/qwen3-tts-native/releases) |
 
-## What this repo does
+## What you get
 
 ```text
-HF weights (offline) ──convert──► GGUF + presets
-qwen3-tts.cpp pin     ──build───► libqwen3tts + qwen3-tts-cli
-tools/worker_main.c   ──build───► qwen3-tts-worker
-                    ──package──► dist/*.tar.gz  (what products ship)
+qwen3-tts-native-<os>-<arch>.tar.gz
+├── install.json          # schema qwen3-tts-native.install.v1 + hashes
+├── SHA256SUMS
+├── bin/qwen3-tts-worker  # product entrypoint
+├── bin/qwen3-tts-cli     # one-shot smoke / debug
+├── bin/libqwen3tts*
+└── models/               # GGUF + presets/
 ```
 
-| Who | What they run |
-|-----|----------------|
-| **Maintainers / CI** | `just` to pin engine, convert, build worker, package tarball |
-| **Downstream apps** | Download tarball, verify hashes, start `qwen3-tts-worker` |
-| **End users** | Never run `just`, convert, or CMake — their app installs the package |
+Host apps verify the archive, unpack it, and start the worker. Wire protocol:
+[docs/PROTOCOL.md](docs/PROTOCOL.md). Layout and naming:
+[docs/DISTRIBUTION.md](docs/DISTRIBUTION.md), [docs/INTEGRATION.md](docs/INTEGRATION.md).
 
-Hard rule: **Python only for offline convert.** Runtime = worker binary + GGUF.
-
-## Consumer path (any host)
+## Using a release
 
 ```bash
-# Unpack a release (or use cmd/qwen3-tts-ensure)
-tar -xzf qwen3-tts-native-<ver>-<os>-<arch>.tar.gz -C /opt/qwen3-tts --strip-components=1
+tar -xzf qwen3-tts-native-darwin-arm64.tar.gz -C /opt/qwen3-tts --strip-components=1
 
 export DYLD_LIBRARY_PATH=/opt/qwen3-tts/bin   # macOS; LD_LIBRARY_PATH on Linux
 /opt/qwen3-tts/bin/qwen3-tts-worker /opt/qwen3-tts/models
-# then JSONL on stdin / f32le PCM on stdout — see docs/PROTOCOL.md
+# JSONL control on stdin, float32 PCM on stdout — see docs/PROTOCOL.md
 ```
 
-Docs:
+Optional: `go run ./cmd/qwen3-tts-ensure -dir <install-root> -url <tar.gz> -sha256 <hex>`  
+(or env `QWEN3_TTS_NATIVE_URL` / `QWEN3_TTS_NATIVE_SHA256`).
 
-- [docs/PROTOCOL.md](docs/PROTOCOL.md) — wire protocol
-- [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) — tarball layout
-- [docs/INTEGRATION.md](docs/INTEGRATION.md) — host integration
-- [docs/PLATFORMS.md](docs/PLATFORMS.md) — macOS / Linux (CUDA) / Windows
-- [docs/TIERS.md](docs/TIERS.md) — 0.6B / 1.7B
+Platform matrix: [docs/PLATFORMS.md](docs/PLATFORMS.md). Tiers: [docs/TIERS.md](docs/TIERS.md).
 
-## Maintainer path (this checkout)
+## Building packages (maintainers)
+
+```text
+HF weights ──convert──► GGUF + presets
+engine pin  ──build───► libqwen3tts + CLI
+worker C    ──build───► qwen3-tts-worker
+          ──package──► dist/*.tar.gz
+```
+
+Model conversion from Hugging Face is an **offline maintainer step** (may use
+Python). The published runtime is only the worker binary + GGUF artifacts.
 
 ```bash
 just                         # list recipes
 ENGINE_SHA=<sha> just engine pin
 just engine build            # macOS Metal; Linux CPU
-# Linux + NVIDIA (e.g. Arch, RTX 5060 16GB):
+# Linux + NVIDIA:
 #   CUDA=1 just engine build
 just engine worker
-just convert models          # offline HF → GGUF
-just release package         # dist/*-<os>-<arch>.tar.gz
-just harness smoke           # optional E2E against local build/
-just harness test            # unit tests + platform script self-check
-just bench platform          # host smoke (skips if no worker/models)
-# Arch + RTX 5060 CUDA validation:
-#   CUDA=1 just engine build && just engine worker
-#   REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 just bench platform-cuda
+just convert models
+just release package
+just harness smoke
+just bench platform          # skips cleanly if binaries/models missing
 ```
 
-## Layout
+Publishing: [docs/RELEASE.md](docs/RELEASE.md).
+
+## Repo layout
 
 ```text
 .
-├── tools/           # C: worker_main.c, extract_embedding.c  ← real product
+├── tools/           # C: worker_main.c, extract_embedding.c
 ├── scripts/         # convert, package, bake presets
 ├── third_party/     # engine pin (local checkout)
 ├── models/          # local GGUF + presets (not committed)
 ├── dist/            # release tarballs (not committed)
-├── docs/            # protocol + distribution
-├── cmd/             # optional Go CLIs (ensure, smoke, bench) — tooling only
-├── pkg/             # optional Go helpers for those CLIs — tooling only
+├── docs/            # protocol, distribution, platforms
+├── cmd/             # optional Go CLIs (ensure, smoke, bench)
+├── pkg/             # helpers for those CLIs
 └── .justfiles/      # maintainer recipes
 ```
 
+Go under `cmd/` and `pkg/` is maintainer tooling only. Hosts can integrate in
+any language against the worker protocol.
+
 ## Status
 
-- **Stage A:** warm worker, whole-utterance PCM after synth, soft cancel between
-  requests, 0.6B package + presets.
-- **Stage B (planned):** mid-synth PCM stream + mid-synth cancel.
-- **1.7B:** may be blocked on engine context; omit from package until ready.
+- **Stage A:** warm worker, whole-utterance PCM after synth, soft cancel, 0.6B + presets
+- **Stage B (planned):** mid-synth PCM stream + mid-synth cancel
+- **1.7B:** may be blocked on engine context; omit from package until ready
 
 ## License / models
 

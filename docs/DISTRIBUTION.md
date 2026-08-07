@@ -14,11 +14,16 @@ verifies a prebuilt tarball.
   bin/qwen3-tts-worker
   bin/qwen3-tts-cli
   bin/libqwen3tts*
+  bin/libggml*               # required runtime (Metal/CPU/CUDA backends as built)
   models/*.gguf
   models/presets/*.q3te
   models/presets/presets.json
   cache/…                    # optional, host-managed
 ```
+
+`package_release.sh` copies `libggml*` into `bin/` and rewrites absolute lab
+RPATHs to `@loader_path` (Darwin) / `$ORIGIN` (Linux when `patchelf` is
+available). Product installs must not depend on a maintainer build tree.
 
 ## Maintainers (this repo)
 
@@ -58,6 +63,14 @@ shasum -a 256 dist/qwen3-tts-native-*-$(go env GOOS)-$(go env GOARCH).tar.gz
 | `bin/qwen3-tts-worker` | product process |
 | `bin/qwen3-tts-cli` | one-shot debug |
 | `bin/libqwen3tts.*` | shared lib (`.dylib` or `.so`) |
+| `bin/libggml*` | ggml runtime + backends (required next to worker) |
 | `models/*` | GGUF + presets |
+
+Relocatable smoke (lab machines with a built worker):
+
+```bash
+just release package-smoke   # or: scripts/smoke_package_relocatable.sh
+```
+
 
 Hosts launch **worker**, not CLI, for interactive use.

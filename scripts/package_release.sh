@@ -107,21 +107,96 @@ else
   fi
 fi
 
-# Also ship ggml runtime .so if present next to engine (some CUDA builds need them)
-if [[ "$lib_glob" == "so" ]]; then
-  ggml_src="$engine/ggml/build/src"
-  if [[ -d "$ggml_src" ]]; then
-    shopt -s nullglob
+# Ship ggml runtime shared libs into bin/ so @loader_path / $ORIGIN works without
+# a lab build tree. Darwin used to only ship libqwen3tts; libggml* stayed on
+# absolute LC_RPATH into third_party/.../ggml/build — product installs then
+# failed after the lab path moved (dyld) and fell back to Kokoro mid-reply.
+ggml_src="$engine/ggml/build/src"
+if [[ -d "$ggml_src" ]]; then
+  shopt -s nullglob
+  if [[ "$lib_glob" == "dylib" ]]; then
+    # Flatten versioned dylibs + symlinks from nested backend dirs into bin/.
+    while IFS= read -r -d '' f; do
+      base="$(basename "$f")"
+      # Prefer real files over symlinks when both exist; still copy links last.
+      if [[ -L "$f" && -e "$dist/bin/$base" ]]; then
+        continue
+      fi
+      cp -a "$f" "$dist/bin/"
+    done < <(find "$ggml_src" \( -name 'libggml*.dylib' -o -name 'libggml*.*.dylib' \) -print0 2>/dev/null)
+  else
     for f in \
       "$ggml_src"/libggml*.so* \
       "$ggml_src"/ggml-cuda/libggml*.so* \
       "$ggml_src"/ggml-cpu/libggml*.so* \
-      "$ggml_src"/ggml-base/libggml*.so*
+      "$ggml_src"/ggml-base/libggml*.so* \
+      "$ggml_src"/ggml-blas/libggml*.so*
     do
       [[ -e "$f" ]] || continue
       cp -a "$f" "$dist/bin/" 2>/dev/null || true
     done
   fi
+fi
+
+# Fail closed: Metal/CPU product packages need at least libggml + backend bits.
+if [[ "$lib_glob" == "dylib" ]]; then
+  if [[ ! -e "$dist/bin/libggml.0.dylib" && ! -e "$dist/bin/libggml.dylib" ]]; then
+    echo "Package incomplete: no libggml*.dylib in bin/ (ggml build missing under $ggml_src)" >&2
+    exit 1
+  fi
+  if [[ ! -e "$dist/bin/libggml-base.0.dylib" && ! -e "$dist/bin/libggml-base.dylib" ]]; then
+    echo "Package incomplete: no libggml-base*.dylib in bin/" >&2
+    exit 1
+  fi
+fi
+
+# Rewrite absolute lab RPATHs → @loader_path so the tarball is relocatable.
+# CMake often embeds the build tree; product hosts only set DYLD/LD to bin/.
+relocate_macho_rpaths() {
+  local f="$1"
+  [[ -f "$f" && ! -L "$f" ]] || return 0
+  # Only Mach-O binaries/dylibs
+  file -b "$f" 2>/dev/null | grep -q 'Mach-O' || return 0
+  local paths path has_loader=0
+  paths="$(otool -l "$f" 2>/dev/null | awk '/cmd LC_RPATH/{getline; getline; if ($1=="path") print $2}')"
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    if [[ "$path" == "@loader_path" || "$path" == "@loader_path/"* ]]; then
+      has_loader=1
+      continue
+    fi
+    # Drop absolute / relative lab paths; keep nothing else that isn't loader-relative.
+    install_name_tool -delete_rpath "$path" "$f" 2>/dev/null || true
+  done <<< "$paths"
+  if [[ "$has_loader" -eq 0 ]]; then
+    install_name_tool -add_rpath @loader_path "$f" 2>/dev/null || true
+  fi
+  # Ad-hoc re-sign after load-command edits (SIP / Gatekeeper friendliness).
+  if command -v codesign >/dev/null 2>&1; then
+    codesign -s - -f "$f" 2>/dev/null || true
+  fi
+}
+
+if [[ "$lib_glob" == "dylib" ]]; then
+  shopt -s nullglob
+  for f in "$dist/bin"/*; do
+    relocate_macho_rpaths "$f"
+  done
+  # Sanity: no absolute RPATH left on the product dylib.
+  abs_left="$(otool -l "$dist/bin/libqwen3tts.dylib" 2>/dev/null | awk '/cmd LC_RPATH/{getline; getline; if ($1=="path" && $2 ~ /^\//) print $2}')"
+  if [[ -n "${abs_left// }" ]]; then
+    echo "Package incomplete: libqwen3tts still has absolute RPATH(s):" >&2
+    echo "$abs_left" >&2
+    exit 1
+  fi
+elif command -v patchelf >/dev/null 2>&1; then
+  # Linux: prefer $ORIGIN in bin/ when patchelf is available.
+  shopt -s nullglob
+  for f in "$dist/bin"/libqwen3tts.so* "$dist/bin"/libggml*.so* "$dist/bin"/qwen3-tts-worker "$dist/bin"/qwen3-tts-cli; do
+    [[ -f "$f" && ! -L "$f" ]] || continue
+    file -b "$f" 2>/dev/null | grep -q 'ELF' || continue
+    patchelf --set-rpath '$ORIGIN' "$f" 2>/dev/null || true
+  done
 fi
 
 cp "$models/qwen3-tts-0.6b-f16.gguf" "$dist/models/"

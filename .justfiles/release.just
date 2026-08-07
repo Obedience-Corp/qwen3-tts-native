@@ -12,6 +12,14 @@ package:
     chmod +x "$root/scripts/package_release.sh"
     "$root/scripts/package_release.sh"
 
+# Prove tarball is relocatable: ships libggml*, no lab absolute RPATH, worker synths.
+package-smoke:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    chmod +x "$root/scripts/smoke_package_relocatable.sh"
+    REQUIRE_PACKAGE_SMOKE=1 "$root/scripts/smoke_package_relocatable.sh"
+
 # Maintainer checklist (not user docs).
 checklist:
     @echo "Maintainer only (users use Samantha models ensure):"

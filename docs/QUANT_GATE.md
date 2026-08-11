@@ -6,7 +6,8 @@
 |----------|--------|-------|
 | **0.6B F16** | **Shipped / default** | Parity suite green (`just bench parity`); packaging + live envelopes |
 | **0.6B Q8** (or other quant) | **Not product yet** | Convert may produce quant GGUF offline; **not** released until listening + parity pass |
-| **1.7B any quant** | **Blocked on engine** | Upstream pin is 0.6B architecture only — see `TIERS.md` |
+| **1.7B F16** | **Engine + convert ready** | Requires `code_pred.small_to_mtp.*` in GGUF; listening/parity gate before advertising in product defaults — see `TIERS.md` |
+| **1.7B Q8** (or other quant) | **Not product yet** | Same quant gate as 0.6B after F16 listening passes |
 
 ## Gate rules (when a quant candidate is proposed)
 

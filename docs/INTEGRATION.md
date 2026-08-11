@@ -59,7 +59,9 @@ Any language can implement the client. A small Go helper exists at
 | Tier | Notes |
 |------|--------|
 | `0.6b` | Default ship |
-| `1.7b` | Optional; may be absent — fail closed if requested but missing |
+| `1.7b` | Optional quality tier; engine supports talker/code_pred split + MTP projection. Fail closed if requested but missing from the package. Select with `QWEN3_TTS_TIER=1.7b` or `QWEN3_TTS_MODEL=/path/to/qwen3-tts-1.7b-f16.gguf`. |
+
+See [TIERS.md](TIERS.md) for architecture details and convert commands.
 
 ## Host app responsibilities
 

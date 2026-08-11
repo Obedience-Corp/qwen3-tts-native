@@ -201,6 +201,12 @@ fi
 
 cp "$models/qwen3-tts-0.6b-f16.gguf" "$dist/models/"
 cp "$models/qwen3-tts-tokenizer-f16.gguf" "$dist/models/"
+# Optional 1.7B quality tier (include when convert has produced the GGUF).
+has_17b=0
+if [[ -f "$models/qwen3-tts-1.7b-f16.gguf" ]]; then
+  cp "$models/qwen3-tts-1.7b-f16.gguf" "$dist/models/"
+  has_17b=1
+fi
 [[ -f "$models/install.fragment.json" ]] && cp "$models/install.fragment.json" "$dist/models/"
 mkdir -p "$dist/models/presets"
 cp -R "$models/presets/." "$dist/models/presets/"
@@ -253,6 +259,19 @@ hash_lib="$(sha256 "$lib_real")"
 hash_tts="$(sha256 "$dist/models/qwen3-tts-0.6b-f16.gguf")"
 hash_tok="$(sha256 "$dist/models/qwen3-tts-tokenizer-f16.gguf")"
 hash_presets="$(sha256 "$dist/models/presets/presets.json")"
+models_json_17b=""
+if [[ "$has_17b" -eq 1 ]]; then
+  hash_tts_17b="$(sha256 "$dist/models/qwen3-tts-1.7b-f16.gguf")"
+  models_json_17b=$(cat <<INNER
+,
+    "1.7b": {
+      "quant": "f16",
+      "tts": {"path": "models/qwen3-tts-1.7b-f16.gguf", "sha256": "$hash_tts_17b"},
+      "tokenizer": {"path": "models/qwen3-tts-tokenizer-f16.gguf", "sha256": "$hash_tok"}
+    }
+INNER
+)
+fi
 
 # Backend hint for install.json (not a hard guarantee — runtime may select)
 backend="cpu"
@@ -288,7 +307,7 @@ cat > "$dist/install.json" <<EOF
       "quant": "f16",
       "tts": {"path": "models/qwen3-tts-0.6b-f16.gguf", "sha256": "$hash_tts"},
       "tokenizer": {"path": "models/qwen3-tts-tokenizer-f16.gguf", "sha256": "$hash_tok"}
-    }
+    }$models_json_17b
   },
   "presets": "models/presets/presets.json",
   "presets_sha256": "$hash_presets",

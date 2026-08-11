@@ -93,7 +93,7 @@ any language against the worker protocol.
 
 - **Stage A:** warm worker, whole-utterance PCM after synth, soft cancel, 0.6B + presets
 - **Stage B (planned):** mid-synth PCM stream + mid-synth cancel
-- **1.7B:** may be blocked on engine context; omit from package until ready
+- **1.7B:** engine + convert support (talker/code_pred split + `small_to_mtp`); optional package when GGUF present — see [docs/TIERS.md](docs/TIERS.md)
 
 ## License / models
 

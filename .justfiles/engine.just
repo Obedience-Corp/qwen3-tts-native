@@ -6,24 +6,39 @@ default:
     @just --list --justfile {{source_file()}}
 
 # Clone or update third_party/qwen3-tts.cpp to a pinned SHA (set ENGINE_SHA).
+# Optional ENGINE_REPO (default predict-woo upstream; Obedience-Corp fork for 1.7B).
 pin:
     #!/usr/bin/env bash
     set -euo pipefail
     root="$(git rev-parse --show-toplevel)"
     dest="$root/third_party/qwen3-tts.cpp"
     sha="${ENGINE_SHA:-}"
+    repo="${ENGINE_REPO:-https://github.com/predict-woo/qwen3-tts.cpp.git}"
+    # Prefer docs/ENGINE_PIN.txt when env not set
+    if [[ -z "$sha" && -f "$root/docs/ENGINE_PIN.txt" ]]; then
+      sha="$(awk -F= '/^ENGINE_SHA=/{print $2; exit}' "$root/docs/ENGINE_PIN.txt" | tr -d '[:space:]')"
+      pinned_repo="$(awk -F= '/^ENGINE_REPO=/{print $2; exit}' "$root/docs/ENGINE_PIN.txt" | tr -d '[:space:]')"
+      [[ -n "$pinned_repo" ]] && repo="$pinned_repo"
+    fi
     if [[ -z "$sha" ]]; then
       echo "Set ENGINE_SHA to the full git commit to pin."
       echo "Example: ENGINE_SHA=<sha> just engine pin"
+      echo "Or: ENGINE_REPO=https://github.com/Obedience-Corp/qwen3-tts.cpp.git ENGINE_SHA=<sha> just engine pin"
       exit 1
     fi
     if [[ ! -d "$dest/.git" ]]; then
-      git clone --recursive https://github.com/predict-woo/qwen3-tts.cpp.git "$dest"
+      git clone --recursive "$repo" "$dest"
     fi
-    git -C "$dest" fetch --tags origin
+    # Ensure remote for pin repo exists
+    if ! git -C "$dest" remote get-url pin >/dev/null 2>&1; then
+      git -C "$dest" remote add pin "$repo"
+    else
+      git -C "$dest" remote set-url pin "$repo"
+    fi
+    git -C "$dest" fetch --tags pin
     git -C "$dest" checkout --detach "$sha"
     git -C "$dest" submodule update --init --recursive
-    echo "Pinned qwen3-tts.cpp @ $(git -C "$dest" rev-parse HEAD)"
+    echo "Pinned qwen3-tts.cpp @ $(git -C "$dest" rev-parse HEAD) from $repo"
 
 # Configure + build engine.
 #   macOS:  Metal ON

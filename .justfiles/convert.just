@@ -35,20 +35,29 @@ deps:
     fi
 
 # Download HF weights and write GGUF into models/ (maintainer only).
-models:
+# TIER=0.6b (default) | 1.7b | all
+models tier="0.6b":
     #!/usr/bin/env bash
     set -euo pipefail
     root="$(git rev-parse --show-toplevel)"
     chmod +x "$root/scripts/convert_models.sh"
-    "$root/scripts/convert_models.sh"
+    TIER="{{tier}}" "$root/scripts/convert_models.sh"
+
+# 1.7B convert (~4GB HF download). Same as: just convert models tier=1.7b
+models-17b:
+    just convert models tier=1.7b
+
+# Both tiers.
+models-all:
+    just convert models tier=all
 
 # Skip re-download if HF snapshots already under third_party engine models.
-models-offline:
+models-offline tier="0.6b":
     #!/usr/bin/env bash
     set -euo pipefail
     root="$(git rev-parse --show-toplevel)"
     chmod +x "$root/scripts/convert_models.sh"
-    SKIP_DOWNLOAD=1 "$root/scripts/convert_models.sh"
+    TIER="{{tier}}" SKIP_DOWNLOAD=1 "$root/scripts/convert_models.sh"
 
 # Bake CustomVoice preset embeddings into models/presets/ (maintainer only).
 presets:

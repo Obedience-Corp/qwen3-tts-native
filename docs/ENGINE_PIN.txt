@@ -1,3 +1,7 @@
-ENGINE_SHA=b3ba14077cf1b3e11b86e5f84aa9184605c89b28
-Built: 2026-07-28 Metal arm64
+# Default pin was predict-woo/qwen3-tts.cpp @ b3ba140 (0.6B only).
+# 1.7B architecture lives on Obedience-Corp/qwen3-tts.cpp feat/1.7b-architecture:
+ENGINE_REPO=https://github.com/Obedience-Corp/qwen3-tts.cpp.git
+ENGINE_SHA=580def1f451d05babc917669836f4d6dfbce1932
+Built: 2026-08-11 Metal arm64
+Note: 1.7B talker/code_pred split + small_to_mtp; 0.6B still default ship
 CLI: third_party/qwen3-tts.cpp/build/qwen3-tts-cli (local only, not committed)

@@ -26,9 +26,9 @@ before every code-predictor forward.
 ### Convert / package
 
 ```bash
-just convert models tier=0.6b     # default
-just convert models tier=1.7b     # ~4GB HF download
-just convert models tier=all
+just convert models 0.6b     # default
+just convert models 1.7b     # ~4GB HF download
+just convert models all
 just engine build && just engine worker
 just release package              # includes 1.7B GGUF when present under models/
 ```

@@ -43,13 +43,13 @@ models tier="0.6b":
     chmod +x "$root/scripts/convert_models.sh"
     TIER="{{tier}}" "$root/scripts/convert_models.sh"
 
-# 1.7B convert (~4GB HF download). Same as: just convert models tier=1.7b
+# 1.7B convert (~4GB HF download). Same as: just convert models 1.7b
 models-17b:
-    just convert models tier=1.7b
+    just convert models 1.7b
 
 # Both tiers.
 models-all:
-    just convert models tier=all
+    just convert models all
 
 # Skip re-download if HF snapshots already under third_party engine models.
 models-offline tier="0.6b":

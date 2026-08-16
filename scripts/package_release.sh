@@ -210,6 +210,12 @@ fi
 [[ -f "$models/install.fragment.json" ]] && cp "$models/install.fragment.json" "$dist/models/"
 mkdir -p "$dist/models/presets"
 cp -R "$models/presets/." "$dist/models/presets/"
+# Per-tier presets: the 1.7b speaker encoder is 2048-wide, so it gets its own
+# blobs; the worker resolves by dimension. Ship the dir whenever it was baked.
+if [[ -d "$models/presets-1.7b" ]]; then
+  mkdir -p "$dist/models/presets-1.7b"
+  cp -R "$models/presets-1.7b/." "$dist/models/presets-1.7b/"
+fi
 
 sha256() {
   local f="$1"

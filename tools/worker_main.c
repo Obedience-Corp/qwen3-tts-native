@@ -39,6 +39,42 @@ static int json_get_string(const char *line, const char *key, char *out, size_t 
     return 1;
 }
 
+/* Load a baked preset whose float count matches what the loaded model needs.
+ * Presets are baked per tier (speaker-encoder width differs: 0.6b=1024,
+ * 1.7b=2048), so candidates are checked by dimension, not trusted by path.
+ * Returns malloc'd floats (caller frees) or NULL; *found_any reports whether
+ * any candidate file existed so the error can distinguish missing vs
+ * wrong-tier. */
+static float *load_preset(const char *model_dir, const char *preset,
+                          int32_t want, int *found_any) {
+    static const char *dirs[] = {"presets", "presets-1.7b"};
+    *found_any = 0;
+    for (size_t d = 0; d < sizeof(dirs) / sizeof(dirs[0]); d++) {
+        char path[1200];
+        snprintf(path, sizeof(path), "%s/%s/%s.q3te", model_dir, dirs[d], preset);
+        FILE *f = fopen(path, "rb");
+        if (!f) continue;
+        *found_any = 1;
+        char magic[4];
+        uint32_t ver, nf, sr;
+        if (fread(magic, 1, 4, f) != 4 || memcmp(magic, "Q3TE", 4) != 0 ||
+            fread(&ver, 4, 1, f) != 1 || fread(&nf, 4, 1, f) != 1 || fread(&sr, 4, 1, f) != 1 ||
+            nf == 0 || nf > 4096 || (int32_t)nf != want) {
+            fclose(f);
+            continue;
+        }
+        float *emb = (float *)malloc(sizeof(float) * nf);
+        if (!emb || fread(emb, sizeof(float), nf, f) != nf) {
+            free(emb);
+            fclose(f);
+            continue;
+        }
+        fclose(f);
+        return emb;
+    }
+    return NULL;
+}
+
 static void emit_ready(void) {
     printf("{\"type\":\"ready\",\"protocol\":\"qwen3-tts-worker/v1\",\"sample_rate\":24000,"
            "\"pcm_format\":\"f32le\",\"streaming\":false,"
@@ -86,35 +122,20 @@ int main(int argc, char **argv) {
         if (ref[0]) {
             audio = qwen3_tts_synthesize_with_voice_file(tts, text, ref, &params);
         } else if (preset[0]) {
-            /* Load baked preset: model_dir/presets/Name.q3te */
-            char path[1200];
-            snprintf(path, sizeof(path), "%s/presets/%s.q3te", model_dir, preset);
-            FILE *f = fopen(path, "rb");
-            if (!f) {
-                printf("{\"type\":\"error\",\"id\":\"%s\",\"message\":\"preset not found\"}\n", id);
+            int32_t want = qwen3_tts_speaker_embedding_size(tts);
+            int found_any = 0;
+            float *emb = load_preset(model_dir, preset, want, &found_any);
+            if (!emb) {
+                if (found_any) {
+                    printf("{\"type\":\"error\",\"id\":\"%s\",\"message\":\"preset '%s' is not baked for this model tier (expects %d floats)\"}\n",
+                           id, preset, want);
+                } else {
+                    printf("{\"type\":\"error\",\"id\":\"%s\",\"message\":\"preset not found\"}\n", id);
+                }
                 fflush(stdout);
                 continue;
             }
-            char magic[4];
-            uint32_t ver, nf, sr;
-            if (fread(magic, 1, 4, f) != 4 || memcmp(magic, "Q3TE", 4) != 0 ||
-                fread(&ver, 4, 1, f) != 1 || fread(&nf, 4, 1, f) != 1 || fread(&sr, 4, 1, f) != 1 ||
-                nf == 0 || nf > 4096) {
-                fclose(f);
-                printf("{\"type\":\"error\",\"id\":\"%s\",\"message\":\"bad preset file\"}\n", id);
-                fflush(stdout);
-                continue;
-            }
-            float *emb = (float *)malloc(sizeof(float) * nf);
-            if (!emb || fread(emb, sizeof(float), nf, f) != nf) {
-                free(emb);
-                fclose(f);
-                printf("{\"type\":\"error\",\"id\":\"%s\",\"message\":\"preset read failed\"}\n", id);
-                fflush(stdout);
-                continue;
-            }
-            fclose(f);
-            audio = qwen3_tts_synthesize_with_embedding(tts, text, emb, (int32_t)nf, &params);
+            audio = qwen3_tts_synthesize_with_embedding(tts, text, emb, want, &params);
             free(emb);
         } else {
             audio = qwen3_tts_synthesize(tts, text, &params);

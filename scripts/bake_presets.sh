@@ -39,7 +39,13 @@ cc -O2 -o "$extract" "$root/tools/extract_embedding.c" \
 mkdir -p "$presets_out" "$refs"
 echo "Baking preset references via managed CustomVoice (offline only)..."
 
-if [[ -z "$QROOT" || ! -x "$PY" || ! -f "$WORKER" || ! -d "$MODEL" ]]; then
+# The Python CustomVoice tree is only needed to synthesize missing reference
+# WAVs; re-extracting embeddings from existing refs is fully native.
+need_python=0
+for v in "${VOICES[@]}"; do
+  [[ -f "$refs/${v}.wav" ]] || need_python=1
+done
+if [[ $need_python -eq 1 ]] && [[ -z "$QROOT" || ! -x "$PY" || ! -f "$WORKER" || ! -d "$MODEL" ]]; then
   echo "Offline bake root not found (need Python CustomVoice tree for ref WAVs only)." >&2
   echo "Set QWEN3_TTS_BAKE_ROOT to a local convert/bake tree, or place pre-baked" >&2
   echo "artifacts under models/presets/ and artifacts/preset_refs/." >&2
@@ -83,6 +89,23 @@ done
   echo '  ]'
   echo '}'
 } > "$presets_out/presets.json"
+
+# 1.7B presets: the speaker encoder is 2048-wide there, so 0.6b blobs cannot
+# condition it (the worker picks per-tier files by dimension). Same reference
+# WAVs, extracted through the 1.7b model when its GGUF is present.
+if [[ -f "$models/qwen3-tts-1.7b-f16.gguf" ]]; then
+  out17="$root/models/presets-1.7b"
+  mkdir -p "$out17"
+  for v in "${VOICES[@]}"; do
+    wav="$refs/${v}.wav"
+    [[ -f "$wav" ]] || continue
+    echo "[emb 1.7b] $v"
+    QWEN3_TTS_TIER=1.7b "$extract" "$models" "$wav" "$out17/${v}.q3te"
+  done
+  echo "Baked 1.7b presets into $out17"
+else
+  echo "1.7b GGUF absent — skipped presets-1.7b (convert tier 1.7b first)"
+fi
 
 echo "Baked ${#VOICES[@]} presets into $presets_out"
 echo "Include models/presets/ in release tarball for users (no just/python on user machines)."

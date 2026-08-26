@@ -91,6 +91,29 @@ latency:
     ls -la "$root/docs/latency/"
     cat "$root/docs/latency/worker_warmish.json"
 
+# Per-fixture warm wall/RTF for one tier (qwen.warmbench.v1) under artifacts/latency/.
+# Load is excluded (one discarded warmup synth). Stage A: TTFA == full wall.
+#   just bench warm 0.6b
+#   just bench warm 1.7b 3
+#   just bench warm 0.6b 1 F1_anchor      # quick smoke
+warm tier="0.6b" iters="3" fixtures="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    export QWEN_ROOT="$root"
+    export QWEN_WORKER="${QWEN_WORKER:-$root/build/qwen3-tts-worker}"
+    export QWEN_MODELS="${QWEN_MODELS:-$root/models}"
+    export QWEN3_TTS_TIER="{{tier}}"
+    export DYLD_LIBRARY_PATH="$root/build${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+    export LD_LIBRARY_PATH="$root/build${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    out="${QWEN_WARM_BENCH_JSON:-$root/artifacts/latency/warm_{{tier}}.json}"
+    if [[ ! -x "$QWEN_WORKER" ]]; then
+      echo "Missing worker — just engine build" >&2
+      exit 1
+    fi
+    mkdir -p "$(dirname "$out")"
+    (cd "$root" && go run ./cmd/warm-bench -iters {{iters}} -fixtures "{{fixtures}}" -out "$out")
+
 # Platform smoke (worker + optional CLI). Skips cleanly if binaries/models missing.
 # Validation hosts (Arch + RTX 5060 CUDA, or macOS Metal with full build):
 #   REQUIRE_PLATFORM_SMOKE=1 just bench platform

@@ -7,7 +7,8 @@
 //
 // Stage A caveat: the worker returns one PCM blob after the whole utterance
 // (streaming=false), so time-to-first-audio equals the full wall by
-// construction. There is no separate TTFA here until stage B lands.
+// construction. Pass -stream to request stage-B chunks, which makes TTFA a real
+// measurement and lets the bench replay playback to count underruns.
 //
 //	QWEN3_TTS_TIER=1.7b QWEN_WORKER=build/qwen3-tts-worker QWEN_MODELS=models \
 //	  QWEN_WARM_BENCH_JSON=artifacts/latency/warm_1.7b.json go run ./cmd/warm-bench
@@ -42,6 +43,9 @@ const warmupText = "Warmup utterance, discarded from the results."
 type run struct {
 	Iter      int     `json:"iter"`
 	WallMs    float64 `json:"wall_ms"`
+	TTFAMs    float64 `json:"ttfa_ms"`
+	Chunks    int     `json:"chunks"`
+	Underruns int     `json:"underruns"`
 	AudioS    float64 `json:"audio_duration_s"`
 	RTF       float64 `json:"rtf"`
 	NSamples  int     `json:"n_samples"`
@@ -49,35 +53,63 @@ type run struct {
 }
 
 type fixtureResult struct {
-	Fixture      string  `json:"fixture"`
-	Text         string  `json:"text"`
-	Iterations   int     `json:"iterations"`
-	WallMsMedian float64 `json:"wall_ms_median"`
-	WallMsMax    float64 `json:"wall_ms_max"`
-	AudioSMedian float64 `json:"audio_s_median"`
-	RTFMedian    float64 `json:"rtf_median"`
-	RTFMax       float64 `json:"rtf_max"`
-	Runs         []run   `json:"runs"`
+	Fixture       string  `json:"fixture"`
+	Text          string  `json:"text"`
+	Iterations    int     `json:"iterations"`
+	WallMsMedian  float64 `json:"wall_ms_median"`
+	WallMsMax     float64 `json:"wall_ms_max"`
+	TTFAMsMedian  float64 `json:"ttfa_ms_median"`
+	TTFAMsMax     float64 `json:"ttfa_ms_max"`
+	ChunksMedian  float64 `json:"chunks_median"`
+	UnderrunTotal int     `json:"underruns_total"`
+	AudioSMedian  float64 `json:"audio_s_median"`
+	RTFMedian     float64 `json:"rtf_median"`
+	RTFMax        float64 `json:"rtf_max"`
+	Runs          []run   `json:"runs"`
 }
 
 type report struct {
-	Schema       string          `json:"schema"`
-	Backend      string          `json:"backend"`
-	BackendEnv   string          `json:"backend_env"`
-	Protocol     string          `json:"protocol"`
-	Tier         string          `json:"tier"`
-	Preset       string          `json:"preset"`
-	Streaming    bool            `json:"streaming"`
-	SampleRate   int             `json:"sample_rate"`
-	ColdReadyMs  float64         `json:"cold_ready_ms"`
-	WarmupWallMs float64         `json:"warmup_wall_ms"`
-	WarmupText   string          `json:"warmup_text"`
-	TTFAHonesty  string          `json:"ttfa_honesty"`
-	RTFMedian    float64         `json:"rtf_median_all"`
-	RTFMax       float64         `json:"rtf_max_all"`
-	Fixtures     []fixtureResult `json:"fixtures"`
-	Errors       []string        `json:"errors,omitempty"`
-	MeasuredAt   string          `json:"measured_at"`
+	Schema           string          `json:"schema"`
+	Backend          string          `json:"backend"`
+	BackendEnv       string          `json:"backend_env"`
+	Protocol         string          `json:"protocol"`
+	Tier             string          `json:"tier"`
+	Preset           string          `json:"preset"`
+	Streaming        bool            `json:"streaming"`
+	StreamingCapable bool            `json:"streaming_capable"`
+	StreamRequested  bool            `json:"stream_requested"`
+	SampleRate       int             `json:"sample_rate"`
+	ColdReadyMs      float64         `json:"cold_ready_ms"`
+	WarmupWallMs     float64         `json:"warmup_wall_ms"`
+	WarmupText       string          `json:"warmup_text"`
+	TTFAHonesty      string          `json:"ttfa_honesty"`
+	TTFAMsMedian     float64         `json:"ttfa_ms_median_all"`
+	TTFAMsMax        float64         `json:"ttfa_ms_max_all"`
+	RTFMedian        float64         `json:"rtf_median_all"`
+	RTFMax           float64         `json:"rtf_max_all"`
+	UnderrunTotal    int             `json:"underruns_total"`
+	Fixtures         []fixtureResult `json:"fixtures"`
+	Errors           []string        `json:"errors,omitempty"`
+	MeasuredAt       string          `json:"measured_at"`
+}
+
+// underruns replays playback: the player starts when the first chunk lands and
+// then consumes audio in realtime. Every later chunk that arrives after the
+// player would have run out of what it already had is one underrun.
+func underruns(res *workerclient.SynthResult) int {
+	if len(res.Chunks) < 2 || res.SampleRate <= 0 {
+		return 0
+	}
+	start := res.Chunks[0].At
+	buffered := 0.0
+	count := 0
+	for i, ch := range res.Chunks {
+		if i > 0 && ch.At.Seconds()-start.Seconds() > buffered {
+			count++
+		}
+		buffered += float64(ch.NSamples) / float64(res.SampleRate)
+	}
+	return count
 }
 
 func main() {
@@ -89,6 +121,7 @@ func main() {
 		models  = flag.String("models", envOr("QWEN_MODELS", filepath.Join(root, "models")), "model directory")
 		preset  = flag.String("preset", envOr("QWEN_PRESET", "Vivian"), "baked preset name")
 		outPath = flag.String("out", envOr("QWEN_WARM_BENCH_JSON", ""), "write JSON report here (default: stdout)")
+		stream  = flag.Bool("stream", envOr("QWEN_WARM_BENCH_STREAM", "") != "", "request stage-B streamed PCM chunks")
 	)
 	flag.Parse()
 
@@ -110,20 +143,31 @@ func main() {
 	}
 	defer c.Close()
 
+	streaming := *stream && ready.StreamingCapable
+	synth := c.Synthesize
+	honesty := "stage_A_ttfa_equals_full_wall"
+	if streaming {
+		synth = c.SynthesizeStreaming
+		honesty = "stage_B_ttfa_is_first_pcm_chunk_on_host"
+	} else if *stream {
+		honesty = "stream_requested_but_worker_reports_not_capable_ttfa_equals_full_wall"
+	}
+
 	rep := report{
 		Schema: "qwen.warmbench.v1", Backend: "native-qwen3-tts-worker",
 		BackendEnv: os.Getenv("QWEN3_TTS_BACKEND"), Protocol: ready.Protocol,
 		Tier: envOr("QWEN3_TTS_TIER", "0.6b"), Preset: *preset,
-		Streaming: ready.Streaming, SampleRate: ready.SampleRate,
+		Streaming: ready.Streaming, StreamingCapable: ready.StreamingCapable,
+		StreamRequested: *stream, SampleRate: ready.SampleRate,
 		ColdReadyMs: time.Since(t0).Seconds() * 1000,
 		WarmupText:  warmupText,
-		TTFAHonesty: "stage_A_ttfa_equals_full_wall",
+		TTFAHonesty: honesty,
 		MeasuredAt:  time.Now().UTC().Format(time.RFC3339),
 	}
 
 	// Discard one synthesis so model load and first-touch kernel cost stay out
 	// of every reported number.
-	warm, err := c.Synthesize(ctx, "warmup", warmupText, *preset)
+	warm, err := synth(ctx, "warmup", warmupText, *preset)
 	if err != nil {
 		fail("warmup synth: %v", err)
 	}
@@ -135,7 +179,7 @@ func main() {
 	for i := 1; i <= *iters; i++ {
 		for _, f := range selected {
 			started := time.Now()
-			res, err := c.Synthesize(ctx, fmt.Sprintf("%s-%d", f.ID, i), f.Text, *preset)
+			res, err := synth(ctx, fmt.Sprintf("%s-%d", f.ID, i), f.Text, *preset)
 			if err != nil {
 				rep.Errors = append(rep.Errors, fmt.Sprintf("%s iter %d: %v", f.ID, i, err))
 				continue
@@ -145,16 +189,19 @@ func main() {
 			if audioS > 0 {
 				rtf = res.Wall.Seconds() / audioS
 			}
+			under := underruns(res)
 			byFixture[f.ID] = append(byFixture[f.ID], run{
-				Iter: i, WallMs: res.Wall.Seconds() * 1000, AudioS: audioS, RTF: rtf,
+				Iter: i, WallMs: res.Wall.Seconds() * 1000,
+				TTFAMs: res.TTFA.Seconds() * 1000, Chunks: len(res.Chunks), Underruns: under,
+				AudioS: audioS, RTF: rtf,
 				NSamples: len(res.Samples), StartedAt: started.UTC().Format(time.RFC3339),
 			})
-			fmt.Fprintf(os.Stderr, "%-18s iter=%d wall=%.0fms audio=%.2fs rtf=%.3f\n",
-				f.ID, i, res.Wall.Seconds()*1000, audioS, rtf)
+			fmt.Fprintf(os.Stderr, "%-18s iter=%d wall=%.0fms ttfa=%.0fms chunks=%d underruns=%d audio=%.2fs rtf=%.3f\n",
+				f.ID, i, res.Wall.Seconds()*1000, res.TTFA.Seconds()*1000, len(res.Chunks), under, audioS, rtf)
 		}
 	}
 
-	var allRTF []float64
+	var allRTF, allTTFA []float64
 	for _, f := range selected {
 		runs := byFixture[f.ID]
 		if len(runs) == 0 {
@@ -163,10 +210,20 @@ func main() {
 		walls := field(runs, func(r run) float64 { return r.WallMs })
 		audio := field(runs, func(r run) float64 { return r.AudioS })
 		rtfs := field(runs, func(r run) float64 { return r.RTF })
+		ttfas := field(runs, func(r run) float64 { return r.TTFAMs })
+		chunks := field(runs, func(r run) float64 { return float64(r.Chunks) })
+		under := 0
+		for _, r := range runs {
+			under += r.Underruns
+		}
+		rep.UnderrunTotal += under
 		allRTF = append(allRTF, rtfs...)
+		allTTFA = append(allTTFA, ttfas...)
 		rep.Fixtures = append(rep.Fixtures, fixtureResult{
 			Fixture: f.ID, Text: f.Text, Iterations: len(runs),
 			WallMsMedian: median(walls), WallMsMax: max(walls),
+			TTFAMsMedian: median(ttfas), TTFAMsMax: max(ttfas),
+			ChunksMedian: median(chunks), UnderrunTotal: under,
 			AudioSMedian: median(audio),
 			RTFMedian:    median(rtfs), RTFMax: max(rtfs),
 			Runs:         runs,
@@ -175,6 +232,10 @@ func main() {
 	if len(allRTF) > 0 {
 		rep.RTFMedian = median(allRTF)
 		rep.RTFMax = max(allRTF)
+	}
+	if len(allTTFA) > 0 {
+		rep.TTFAMsMedian = median(allTTFA)
+		rep.TTFAMsMax = max(allTTFA)
 	}
 
 	b, err := json.MarshalIndent(rep, "", "  ")
@@ -191,8 +252,9 @@ func main() {
 		if err := os.WriteFile(*outPath, b, 0o644); err != nil {
 			fail("write: %v", err)
 		}
-		fmt.Fprintf(os.Stderr, "tier=%s rtf_median=%.3f rtf_max=%.3f wrote %s\n",
-			rep.Tier, rep.RTFMedian, rep.RTFMax, *outPath)
+		fmt.Fprintf(os.Stderr, "tier=%s rtf_median=%.3f rtf_max=%.3f ttfa_median=%.0fms ttfa_max=%.0fms underruns=%d wrote %s\n",
+			rep.Tier, rep.RTFMedian, rep.RTFMax, rep.TTFAMsMedian, rep.TTFAMsMax,
+			rep.UnderrunTotal, *outPath)
 	}
 	if len(rep.Errors) > 0 {
 		fail("%d synthesis error(s); see report", len(rep.Errors))

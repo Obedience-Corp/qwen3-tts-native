@@ -1,5 +1,6 @@
 // Package workerclient is a Go client for qwen3-tts-worker protocol v1.
-// Stage A: whole-utterance PCM after synth. Stage B will stream multiple pcm_meta chunks.
+// Stage A: whole-utterance PCM after synth. Stage B (SynthesizeStreaming) asks
+// the worker for multiple pcm_meta chunks during synthesis.
 package workerclient
 
 import (
@@ -30,13 +31,18 @@ type Client struct {
 
 // Ready is the first stdout line after worker load.
 type Ready struct {
-	Type       string   `json:"type"`
-	Protocol   string   `json:"protocol"`
-	SampleRate int      `json:"sample_rate"`
-	PCMFormat  string   `json:"pcm_format"`
-	Streaming  bool     `json:"streaming"`
-	Presets    []string `json:"presets,omitempty"`
-	Note       string   `json:"note,omitempty"`
+	Type       string `json:"type"`
+	Protocol   string `json:"protocol"`
+	SampleRate int    `json:"sample_rate"`
+	PCMFormat  string `json:"pcm_format"`
+	// Streaming is the worker's default for requests that do not set "stream".
+	Streaming bool `json:"streaming"`
+	// StreamingCapable reports whether the worker was built against an engine
+	// pin that has the PCM streaming callback, i.e. whether asking for
+	// "stream":true will actually chunk.
+	StreamingCapable bool     `json:"streaming_capable"`
+	Presets          []string `json:"presets,omitempty"`
+	Note             string   `json:"note,omitempty"`
 }
 
 // StartWorker launches the packaged worker with modelDir (directory containing GGUF + presets/).
@@ -143,31 +149,57 @@ func readLineCtx(ctx context.Context, r *bufio.Reader) (string, error) {
 	}
 }
 
-// SynthResult is one stage-A utterance (may become multi-chunk in stage B).
+// Chunk is one pcm_meta frame's arrival, relative to the synthesize write.
+type Chunk struct {
+	At       time.Duration
+	NSamples int
+}
+
+// SynthResult is one utterance: a single blob in stage A, several chunks in stage B.
 type SynthResult struct {
 	ID         string
 	SampleRate int
 	Samples    []float32
 	// Wall is host time from synthesize write to final (lab bench).
 	Wall time.Duration
+	// TTFA is host time from synthesize write to the first pcm_meta. In stage A
+	// it equals Wall by construction; in stage B it is the streaming win.
+	TTFA time.Duration
+	// Chunks records every pcm_meta arrival, so a bench can replay playback and
+	// find underruns.
+	Chunks []Chunk
 }
 
 // Synthesize runs one request and collects PCM until final (stage A: single pcm_meta).
 func (c *Client) Synthesize(ctx context.Context, id, text, preset string) (*SynthResult, error) {
-	return c.SynthesizeWithRef(ctx, id, text, preset, "")
+	return c.synthesize(ctx, id, text, preset, "", false)
 }
 
 // SynthesizeWithRef is synthesize with optional clone ref_wav path.
 func (c *Client) SynthesizeWithRef(ctx context.Context, id, text, preset, refWAV string) (*SynthResult, error) {
+	return c.synthesize(ctx, id, text, preset, refWAV, false)
+}
+
+// SynthesizeStreaming asks the worker for stage-B chunked PCM ("stream":true).
+// A worker without streaming support answers with the stage-A blob, which this
+// client handles identically — check Ready.StreamingCapable to tell them apart.
+func (c *Client) SynthesizeStreaming(ctx context.Context, id, text, preset string) (*SynthResult, error) {
+	return c.synthesize(ctx, id, text, preset, "", true)
+}
+
+func (c *Client) synthesize(ctx context.Context, id, text, preset, refWAV string, stream bool) (*SynthResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	req := map[string]string{"type": "synthesize", "id": id, "text": text}
+	req := map[string]any{"type": "synthesize", "id": id, "text": text}
 	if preset != "" {
 		req["preset"] = preset
 	}
 	if refWAV != "" {
 		req["ref_wav"] = refWAV
+	}
+	if stream {
+		req["stream"] = true
 	}
 	b, err := json.Marshal(req)
 	if err != nil {
@@ -215,7 +247,14 @@ func (c *Client) SynthesizeWithRef(ctx context.Context, id, text, preset, refWAV
 			if _, err := io.ReadFull(c.stdout, buf); err != nil {
 				return nil, fmt.Errorf("pcm read: %w", err)
 			}
-			// Stage A emits a trailing newline after raw PCM before final JSON.
+			// Timed after the bytes land: this is when the host could play them.
+			at := time.Since(start)
+			if len(out.Chunks) == 0 {
+				out.TTFA = at
+			}
+			out.Chunks = append(out.Chunks, Chunk{At: at, NSamples: n})
+			// Each chunk (and the stage-A blob) ends with a newline before the
+			// next JSON line.
 			if b, err := c.stdout.ReadByte(); err == nil && b != '\n' {
 				_ = c.stdout.UnreadByte()
 			}

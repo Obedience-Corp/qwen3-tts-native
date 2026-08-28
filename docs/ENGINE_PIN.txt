@@ -4,10 +4,10 @@ ENGINE_REPO=https://github.com/Obedience-Corp/qwen3-tts.cpp.git
 ENGINE_SHA=ed7312b8c69fcccff6285af7748fd526be2ff8cd
 Built: 2026-08-27 Metal arm64 + Linux CUDA (RTX 5060 Ti)
 Note: 1.7B talker/code_pred split + small_to_mtp; 0.6B still default ship
-Note: PENDING — ed7312b is the tip of branch feat/streaming-pcm (engine PR for
-      WI-3dbb44 slice 5a: opt-in PCM streaming). Not on the engine default
-      branch yet. Until that PR merges, `just engine pin` needs the branch
-      fetched; revert to 22277bc6f087fd081df8bffa9c280b106a8af567 for a
-      stage-A-only build. The worker builds against either pin — streaming is
-      compiled in only when the header defines QWEN3_TTS_HAS_PCM_STREAMING.
+Note: ed7312b (WI-3dbb44 slice 5a: opt-in PCM streaming) merged to the engine
+      default branch 2026-08-28 as merge commit ec40d0b, so the SHA is
+      reachable from engine main and `just engine pin` needs no extra fetch.
+      Revert to 22277bc6f087fd081df8bffa9c280b106a8af567 for a stage-A-only
+      build. The worker builds against either pin — streaming is compiled in
+      only when the header defines QWEN3_TTS_HAS_PCM_STREAMING.
 CLI: third_party/qwen3-tts.cpp/build/qwen3-tts-cli (local only, not committed)

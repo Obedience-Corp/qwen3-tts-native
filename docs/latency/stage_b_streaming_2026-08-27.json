@@ -1,0 +1,225 @@
+{
+  "schema": "qwen.latency.stageb.v1",
+  "id": "stage-b-streaming-2026-08-27",
+  "slice": "WI-3dbb44 fast-local-fleet slice 5 (5a engine PCM callback + 5b worker forwarding). Slice 5c host playback not included.",
+  "measured_at": "2026-08-27T23:55:00Z",
+  "what_this_measures": {
+    "ttfa": "Host wall time from writing the synthesize request to holding the first chunk's PCM bytes. Stage A has no separate TTFA: the single blob is the whole utterance, so ttfa == wall by construction.",
+    "rtf": "synthesis wall / audio duration. >1.0 is slower than realtime.",
+    "underruns": "warm-bench replays playback from the recorded chunk arrival times: the player starts at the first chunk and consumes in realtime; every later chunk that lands after the buffer would have run dry counts as one underrun. n=15 runs per configuration.",
+    "p95": "reported as the observed max, the honest ceiling at n=15 (same convention as F8-qwen-tts-cuda-2026-08-27.json)."
+  },
+  "ship_gate": {
+    "source": "obey-voice fast-local-fleet DESIGN.md section 3",
+    "criteria": "p50 TTFA < 500 ms AND p95 TTFA < 1 s AND RTF < 1.0 with zero underruns on a multi-sentence fixture",
+    "verdict": {
+      "cuda_0.6b": "PASS at every chunk size measured (12, 8, 6 frames). Default chunk 12: TTFA p50 435 ms, p95 441 ms, RTF max 0.571, 0 underruns over 15 runs.",
+      "metal_0.6b": "FAIL. TTFA improves 6.1 s -> 1.29 s but RTF gets *worse* (1.40 -> 1.66 median) and playback underruns 120 times over 15 runs. Do not enable streaming on Metal without a pre-buffer; see metal_prebuffer_note."
+    }
+  },
+  "metal_prebuffer_note": {
+    "formula": "pre-buffer = audio_len * (RTF - 1) (DESIGN section 3)",
+    "worked_example": "F5_paragraph on Metal streams at RTF 1.669 for 23.26 s of audio, so a player must hold 23.26 * 0.669 = 15.6 s before starting or it runs dry. That makes the effective time-to-first-audio ~16 s, not the 1.29 s the TTFA column shows. Reporting the 1.29 s alone would be dishonest.",
+    "why_metal_regresses": "Streaming forces chunked vocoder decode. On CUDA that is already the default for utterances over 34 frames, so streaming costs little. On Metal the default is one graph for the whole utterance, and paying per-chunk graph build/alloc 25 times (plus re-decoding 12 context frames per chunk) costs more than it saves. Metal decode went 4.77 s -> 9.73 s on the 180-frame CLI fixture.",
+    "levers_not_taken": "A larger QWEN3_TTS_DECODER_GPU_CONTEXT_FRAMES makes each chunk more faithful but slower; a smaller chunk lowers TTFA and raises RTF further (Metal chunk 4: TTFA 471 ms, RTF 2.385, 28 underruns on one F4 run). Neither closes the Metal RTF gap. Kokoro remains the fast mouth on Metal."
+  },
+  "machines": [
+    {
+      "role": "cuda",
+      "hostname": "archdtop",
+      "cpu": "AMD Ryzen 9 3900X 12-Core",
+      "gpu": "NVIDIA GeForce RTX 5060 Ti 16GB",
+      "driver": "610.43.03",
+      "cuda_toolkit": "13.3 (local extract under ~/.cache/qwen3-tts-native/cuda-root)",
+      "os": "Arch Linux x86_64, kernel 7.1.3-arch1-3",
+      "power": "desktop, AC",
+      "note": "Built and run in a throwaway tree (~/temp/slice5-streaming), not in ~/campaigns. It links the campaigns checkout's prebuilt libggml-cuda.so read-only; nothing under ~/campaigns or ~/.cache was modified."
+    },
+    {
+      "role": "metal",
+      "cpu": "Apple M4 Max",
+      "os": "macOS 26.5 arm64",
+      "power": "laptop, AC"
+    }
+  ],
+  "backend": {
+    "cuda": {
+      "requested": "QWEN3_TTS_BACKEND=cuda (EXPLICIT — leaving it unset costs ~3.5x on this host, see F8-qwen-tts-cuda-2026-08-27.json backend_gotcha)",
+      "evidence": "qwen3-tts-cli on the same build printed 'TTSTransformer backend: CUDA0' and 'AudioTokenizerDecoder backend: CUDA0'; stage-A RTF 0.469 median reproduces F8's 0.4716/0.4589/0.4572."
+    },
+    "metal": {
+      "requested": "unset (auto)",
+      "evidence": "stage-A RTF 1.400 median reproduces the committed Metal 1.370-1.373 within run-to-run variance."
+    }
+  },
+  "build": {
+    "engine_repo": "Obedience-Corp/qwen3-tts.cpp",
+    "engine_branch": "feat/streaming-pcm",
+    "engine_sha": "ed7312b8c69fcccff6285af7748fd526be2ff8cd",
+    "engine_base_sha": "22277bc6f087fd081df8bffa9c280b106a8af567",
+    "engine_pin_status": "PENDING — engine PR Obedience-Corp/qwen3-tts.cpp#2 is not merged; docs/ENGINE_PIN.txt points at the branch tip and says so.",
+    "harness_repo": "Obedience-Corp/qwen3-tts-native",
+    "harness_branch": "feat/streaming-worker",
+    "harness_base_sha": "e66661a",
+    "worker": "build/qwen3-tts-worker (protocol qwen3-tts-worker/v1, streaming_capable=true)",
+    "harness": "cmd/warm-bench -stream (schema qwen.warmbench.v1), same five fixtures / warmup discard / RTF definition as F7 and F8",
+    "tier": "0.6b",
+    "preset": "Vivian",
+    "sample_rate": 24000,
+    "iterations": 3,
+    "ordering": "round-robin: all 5 fixtures per iteration, 3 iterations",
+    "sampling": "engine defaults (temperature 0.9, top-k 50), so audio duration varies a few percent run to run; RTF is the stable quantity"
+  },
+  "results": {
+    "cuda_stage_a": {
+      "stream_requested": false,
+      "n": 15,
+      "ttfa_ms_p50": 2125.7,
+      "ttfa_ms_p95_observed_max": 11637.8,
+      "rtf_p50": 0.4687,
+      "rtf_max": 0.479,
+      "underruns_total": 0,
+      "F5_paragraph": {
+        "audio_s_median": 24.06,
+        "ttfa_ms_median": 11492.3,
+        "chunks_median": 1,
+        "rtf_median": 0.4778,
+        "underruns": 0
+      },
+      "note": "Baseline. TTFA equals full wall; zero underruns is trivially true because playback cannot start until the whole utterance exists."
+    },
+    "cuda_stage_b_chunk12": {
+      "stream_requested": true,
+      "chunk_frames": 12,
+      "n": 15,
+      "ttfa_ms_p50": 434.8,
+      "ttfa_ms_p95_observed_max": 440.9,
+      "rtf_p50": 0.5531,
+      "rtf_max": 0.571,
+      "underruns_total": 0,
+      "F5_paragraph": {
+        "audio_s_median": 23.02,
+        "ttfa_ms_median": 438.0,
+        "chunks_median": 24,
+        "rtf_median": 0.5535,
+        "underruns": 0
+      },
+      "ship_gate_passes": true,
+      "note": "Engine default chunk size. Best throughput headroom of the three."
+    },
+    "cuda_stage_b_chunk8": {
+      "stream_requested": true,
+      "chunk_frames": 8,
+      "n": 15,
+      "ttfa_ms_p50": 323.5,
+      "ttfa_ms_p95_observed_max": 328.6,
+      "rtf_p50": 0.6516,
+      "rtf_max": 0.6981,
+      "underruns_total": 0,
+      "F5_paragraph": {
+        "audio_s_median": 22.62,
+        "ttfa_ms_median": 326.6,
+        "chunks_median": 36,
+        "rtf_median": 0.6599,
+        "underruns": 0
+      },
+      "ship_gate_passes": true
+    },
+    "cuda_stage_b_chunk6": {
+      "stream_requested": true,
+      "chunk_frames": 6,
+      "n": 15,
+      "ttfa_ms_p50": 263.1,
+      "ttfa_ms_p95_observed_max": 268.4,
+      "rtf_p50": 0.7458,
+      "rtf_max": 0.7664,
+      "underruns_total": 0,
+      "F5_paragraph": {
+        "audio_s_median": 23.66,
+        "ttfa_ms_median": 264.7,
+        "chunks_median": 50,
+        "rtf_median": 0.7477,
+        "underruns": 0
+      },
+      "ship_gate_passes": true,
+      "note": "Lowest TTFA measured, still under the RTF gate. The curve is monotone: halving the chunk roughly halves TTFA and adds ~0.1 to RTF."
+    },
+    "metal_stage_a": {
+      "stream_requested": false,
+      "n": 15,
+      "ttfa_ms_p50": 6102.5,
+      "ttfa_ms_p95_observed_max": 35482.1,
+      "rtf_p50": 1.4004,
+      "rtf_max": 1.5612,
+      "underruns_total": 0,
+      "F5_paragraph": {
+        "audio_s_median": 23.74,
+        "ttfa_ms_median": 35059.0,
+        "chunks_median": 1,
+        "rtf_median": 1.4701,
+        "underruns": 0
+      },
+      "note": "Baseline. Already above realtime before streaming is involved."
+    },
+    "metal_stage_b_chunk12": {
+      "stream_requested": true,
+      "chunk_frames": 12,
+      "n": 15,
+      "ttfa_ms_p50": 1294.9,
+      "ttfa_ms_p95_observed_max": 1422.7,
+      "rtf_p50": 1.6604,
+      "rtf_max": 1.9861,
+      "underruns_total": 120,
+      "F5_paragraph": {
+        "audio_s_median": 23.26,
+        "ttfa_ms_median": 1288.5,
+        "chunks_median": 25,
+        "rtf_median": 1.6689,
+        "underruns": 71
+      },
+      "ship_gate_passes": false,
+      "note": "Fails all four criteria. This is the honest result: streaming is not a Metal speed win."
+    }
+  },
+  "equivalence_checks": {
+    "method": "qwen3-tts-cli, greedy sampling (temperature 0 — the only deterministic mode, since rng_ is seeded from std::random_device), --max-tokens 180, byte comparison of the output WAVs. Greedy never emits EOS on this model, which is why the frame count is capped.",
+    "metal": {
+      "pin_default_path_vs_branch_default_path": "IDENTICAL (sha256 7dc5fe18...)",
+      "streamed_vs_nonstreamed_chunked_same_schedule": "IDENTICAL (sha256 bdfbe6db...)",
+      "streamed_vs_single_graph_decode": "DIFFERS — 14.6 dB SNR, max abs diff 0.087 full scale. This is the pre-existing chunked-decode approximation (12 frames of left context), not an artifact of interleaving. It is the shipped CUDA default; on Metal, opting into streaming opts into it.",
+      "chunk_boundary_discontinuity": "none: max sample-to-sample step at the 14 chunk seams was 351 (int16), against a p99 step of 1097 and a peak step of 10435 elsewhere in the same signal. No clicks."
+    },
+    "cuda": {
+      "pin_default_path_vs_branch_default_path": "IDENTICAL (sha256 d85ed5d0...)",
+      "streamed_vs_nonstreamed_chunked_same_schedule": "IDENTICAL (sha256 96f8befb...)"
+    }
+  },
+  "defaults_not_flipped": [
+    "Engine: with no PCM callback installed the whole-utterance path runs unchanged, byte-identical to pin 22277bc (verified on both backends).",
+    "Worker: stage A remains the default. Streaming needs \"stream\":true per request or QWEN3_TTS_STREAM=1.",
+    "obey-voice: untouched by these PRs. It never sets \"stream\", so it keeps receiving one blob per utterance."
+  ],
+  "commands": [
+    "# CUDA (archdtop, throwaway tree ~/temp/slice5-streaming)",
+    "export CUDA_ROOT=$HOME/.cache/qwen3-tts-native/cuda-root/opt/cuda",
+    "export PATH=$CUDA_ROOT/bin:$PATH CUDAToolkit_ROOT=$CUDA_ROOT",
+    "export LD_LIBRARY_PATH=$CUDA_ROOT/targets/x86_64-linux/lib:$LD_LIBRARY_PATH",
+    "cmake -S engine -B engine/build && cmake --build engine/build -j12",
+    "cc -O2 -I engine/src -L engine/build -o build/qwen3-tts-worker tools/worker_main.c -lqwen3tts -lm -lpthread",
+    "QWEN3_TTS_BACKEND=cuda go run ./cmd/warm-bench -iters 3 -out cuda_stageA.json",
+    "QWEN3_TTS_BACKEND=cuda QWEN3_TTS_STREAM_CHUNK_FRAMES=12 go run ./cmd/warm-bench -stream -iters 3 -out cuda_stageB_c12.json",
+    "# Metal (M4 Max): same, without the CUDA exports",
+    "go run ./cmd/warm-bench -iters 3 -out metal_stageA.json",
+    "go run ./cmd/warm-bench -stream -iters 3 -out metal_stageB_c12.json",
+    "# equivalence (per backend)",
+    "qwen3-tts-cli -m models -t \"<3-sentence fixture>\" --temperature 0 --max-tokens 180 -o base.wav",
+    "qwen3-tts-cli -m models -t \"<same>\" --temperature 0 --max-tokens 180 --stream -o stream.wav",
+    "QWEN3_TTS_DECODER_CHUNKED=1 QWEN3_TTS_DECODER_GPU_MAX_FRAMES=24 QWEN3_TTS_DECODER_GPU_CONTEXT_FRAMES=12 qwen3-tts-cli ... -o chunked.wav",
+    "cmp stream.wav chunked.wav"
+  ],
+  "not_measured": [
+    "1.7b tier with streaming. Its RTF is worse than 0.6b's at both backends, so CUDA headroom is smaller and Metal is further out of reach.",
+    "End-to-end PlaybackStartElapsed in obey-voice. That is slice 5c/6; nothing here has been played through a real audio device.",
+    "Listening test. The chunked-vs-single-graph difference on Metal is quantified above but nobody has listened to it."
+  ]
+}

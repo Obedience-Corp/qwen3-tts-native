@@ -12,7 +12,8 @@ host smoke with real GGUF assets, emitted valid 24 kHz mono `f32le` PCM, and
 | Platform | Models | Build recipes | Release package | Backend | Status |
 |----------|--------|---------------|-----------------|---------|--------|
 | **macOS arm64** | Yes | Yes | Yes (`darwin-arm64`) | Metal | **Validated** (latency + platform smoke) |
-| **Linux x86_64** | Yes | Yes (`CUDA=1`) | Yes (`.so`) | NVIDIA CUDA | **Validated** — EndeavourOS/Arch + **RTX 5060 Ti 16GB** |
+| **Linux amd64 CPU** | Yes | Yes | Yes (`linux-amd64`) | CPU | Recipes ready; ship as the default linux/amd64 pin |
+| **Linux amd64 CUDA** | Yes | Yes (`CUDA=1`) | Yes (`linux-amd64-cuda`) | NVIDIA CUDA | **Validated** — EndeavourOS/Arch + **RTX 5060 Ti 16GB** |
 | **Linux aarch64** | Yes | Same | Same | CPU or CUDA | Best-effort (untested) |
 | **Windows x64** | Yes | Not in `just` yet | No | CPU / CUDA later | Planned |
 
@@ -70,9 +71,17 @@ export QWEN3_TTS_BACKEND=cuda
 ### Linux CPU
 
 ```bash
+just engine pin
 just engine build    # no CUDA=1
 just engine worker
+just convert models  # or reuse portable GGUF from another platform tarball
+just release package
+# → dist/qwen3-tts-native-<gitshort>-linux-amd64.tar.gz
+# publish as qwen3-tts-native-linux-amd64.tar.gz
 ```
+
+`install.json` uses Go's `linux`/`amd64` (not `x86_64`) so host apps that
+compare against `runtime.GOOS`/`runtime.GOARCH` accept the archive.
 
 ### Windows
 
@@ -80,8 +89,19 @@ Not wired in `just` yet. Upstream CMake has WIN32 stubs only.
 
 ## Tarball naming
 
+Lab artifact:
+
 ```text
-qwen3-tts-native-<gitshort>-<os>-<arch>.tar.gz
+qwen3-tts-native-<gitshort>-<goos>-<goarch>[ -cuda].tar.gz
 ```
 
-`install.json` records `os`, `arch`, `bin.lib` (`.dylib` or `.so`).
+Stable release names (host defaults):
+
+```text
+qwen3-tts-native-darwin-arm64.tar.gz
+qwen3-tts-native-linux-amd64.tar.gz
+qwen3-tts-native-linux-amd64-cuda.tar.gz
+```
+
+`install.json` records `os`/`arch` as Go's GOOS/GOARCH (`linux`/`amd64`,
+`darwin`/`arm64`) plus `bin.lib` (`.dylib` or `.so`) and `backend_hint`.

@@ -41,12 +41,12 @@ See [PLATFORMS.md](PLATFORMS.md) for macOS / Linux / Windows.
 
 Build output:
 
-`dist/qwen3-tts-native-<gitshort>-<os>-<arch>.tar.gz`
+`dist/qwen3-tts-native-<gitshort>-<goos>-<goarch>[-cuda].tar.gz`
 
 Recommended **stable release names** (for host defaults / CDN):
 
-`qwen3-tts-native-<os>-<arch>.tar.gz`  
-(e.g. `qwen3-tts-native-darwin-arm64.tar.gz`)
+`qwen3-tts-native-<goos>-<goarch>.tar.gz`  
+(e.g. `qwen3-tts-native-darwin-arm64.tar.gz`, `qwen3-tts-native-linux-amd64.tar.gz`)
 
 Schema: `qwen3-tts-native.install.v1` inside the archive.
 

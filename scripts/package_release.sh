@@ -13,13 +13,13 @@ cli="$engine/build/qwen3-tts-cli"
 models="$root/models"
 worker="$root/build/qwen3-tts-worker"
 
-os="$(uname -s | tr '[:upper:]' '[:lower:]')"
-arch="$(uname -m)"
-# Normalize common arch labels for tarball names
-case "$arch" in
-  x86_64|amd64) arch="x86_64" ;;
-  aarch64|arm64) arch="arm64" ;;
-esac
+# shellcheck source=goos_goarch.sh
+source "$root/scripts/goos_goarch.sh"
+# GOOS/GOARCH, not uname: install.json is compared to runtime.GOOS/GOARCH
+# by host apps. linux/x86_64 would be rejected on linux/amd64.
+os="$(qwen_goos)"
+arch="$(qwen_goarch)"
+pkg_suffix="$(qwen_package_suffix)"
 
 if [[ ! -x "$cli" ]]; then
   echo "Missing CLI — build engine first (maintainer: just engine build)" >&2
@@ -70,7 +70,7 @@ fi
 repo_commit="$(git -C "$root" rev-parse HEAD)"
 engine_sha="$(git -C "$engine" rev-parse HEAD 2>/dev/null || echo unknown)"
 ver_short="$(git -C "$root" rev-parse --short HEAD)"
-name="qwen3-tts-native-${ver_short}-${os}-${arch}"
+name="qwen3-tts-native-${ver_short}-${os}-${arch}${pkg_suffix}"
 dist="$root/dist/$name"
 
 rm -rf "$dist"

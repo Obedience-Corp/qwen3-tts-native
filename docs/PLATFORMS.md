@@ -92,8 +92,12 @@ REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 just bench platform-cuda
 
 `CUDA=1` (or `GGML_CUDA=1`) decides three things at once — `-DGGML_CUDA=ON`,
 the `-cuda` tarball suffix, and `install.json`'s `backend_hint` — from the one
-helper in `scripts/goos_goarch.sh`. They cannot disagree; `just harness test`
-asserts it. `QWEN3_TTS_BACKEND` is a **runtime** override and deliberately does
+helper in `scripts/goos_goarch.sh`. They cannot disagree, and `just harness test`
+asserts that **behaviourally**, not by reading the justfile: it runs the real
+`just engine build` against a stub `cmake` in a throwaway repo, captures the
+argv cmake receives, materialises the `CMakeCache.txt` those arguments imply and
+checks the label the packager derives from that cache
+(`scripts/engine_cuda_flag_test.sh`). `QWEN3_TTS_BACKEND` is a **runtime** override and deliberately does
 not reach `backend_hint`: a hint that claims `cuda` on a CPU build is worse than
 no hint, because host apps gate features on it.
 

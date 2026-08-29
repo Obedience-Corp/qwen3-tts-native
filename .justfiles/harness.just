@@ -10,9 +10,11 @@ test:
     root="$(git rev-parse --show-toplevel)"
     (cd "$root" && go test ./pkg/... ./cmd/platform-smoke/)
     chmod +x "$root/scripts/smoke_platform_test.sh" "$root/scripts/smoke_platform.sh" \
-      "$root/scripts/goos_goarch.sh" "$root/scripts/goos_goarch_test.sh"
+      "$root/scripts/goos_goarch.sh" "$root/scripts/goos_goarch_test.sh" \
+      "$root/scripts/engine_cuda_flag_test.sh"
     "$root/scripts/smoke_platform_test.sh"
     "$root/scripts/goos_goarch_test.sh"
+    "$root/scripts/engine_cuda_flag_test.sh"
 
 # Build ensure + smoke binaries into build/.
 build:

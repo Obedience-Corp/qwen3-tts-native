@@ -94,16 +94,13 @@ done
 [[ "$( as_goos linux; unset CUDA GGML_CUDA; qwen_cuda_cmake_flag )" == -DGGML_CUDA=OFF ]] \
   || fail "linux CPU must pass -DGGML_CUDA=OFF explicitly"
 
-# The build recipe must use the helper rather than spelling the option itself.
-# Matching the exact `cmake_args+=(-DGGML_CUDA=` line was too narrow — quoting it,
-# adding a space, appending it to the cmake command, or building the array a
-# different way all slipped past. The rule is now total: goos_goarch.sh owns the
-# literal, engine.just may not contain it in any spelling.
-recipe="$root/.justfiles/engine.just"
-grep -q 'qwen_cuda_cmake_flag' "$recipe" || fail "engine.just no longer sources the cmake flag from goos_goarch.sh"
-if grep -F -- '-DGGML_CUDA=' "$recipe" >/dev/null; then
-  fail "engine.just spells -DGGML_CUDA= itself; the literal belongs to qwen_cuda_cmake_flag"
-fi
+# What the build recipe actually does with this flag is NOT asserted here.
+# Grepping engine.just for a literal was tried and was not sound: -DGGML_CUDA:BOOL=ON
+# is accepted by cmake and matches no literal check; deleting the helper while
+# leaving its name in a comment passed both greps; -D${opt}= evades any of them.
+# scripts/engine_cuda_flag_test.sh runs the real recipe against a stub cmake,
+# asserts the argv cmake receives and the CMakeCache.txt that results, and this
+# file sticks to the pure functions.
 
 # ---------------------------------------------------------------------------
 # Build authority: the packager must describe the binary, not the shell.
@@ -123,7 +120,12 @@ mkdir -p "$tmp/nocache/src"
 [[ "$(qwen_cuda_cache_state "$tmp/cache_off")" == off ]]     || fail "cache OFF not read"
 [[ "$(qwen_cuda_cache_state "$tmp/nocache")"   == unknown ]] || fail "missing cache must be unknown"
 
-resolve() { ( as_goos "${3:-linux}"; qwen_resolve_cuda_build "$tmp/$1" "$tmp/$1/src" 2>/dev/null ); }
+# Prints just the CUDA half of "<cuda> <metal>"; callers below only test CUDA.
+resolve() { ( as_goos "${3:-linux}"; qwen_resolve_build_authority "$tmp/$1" "$tmp/$1/src" 2>/dev/null ) | cut -d' ' -f1; }
+resolve_metal() { ( as_goos "${3:-linux}"; qwen_resolve_build_authority "$tmp/$1" "$tmp/$1/src" 2>/dev/null ) | cut -d' ' -f2; }
+# `resolve` pipes, which hides the exit status, so refusals are checked with the
+# function called directly.
+refuses() { ( as_goos "${3:-linux}"; qwen_resolve_build_authority "$tmp/$1" "$tmp/$1/src" >/dev/null 2>&1 ); }
 
 # RELEASE.md step 5 verbatim: built with CUDA=1, packaged with nothing set.
 # The cache wins, quietly, and the package is labeled cuda instead of cpu.
@@ -135,16 +137,63 @@ resolve() { ( as_goos "${3:-linux}"; qwen_resolve_cuda_build "$tmp/$1" "$tmp/$1/
 [[ "$( unset CUDA GGML_CUDA; resolve cache_off )" == off ]] || fail "CPU cache must resolve off"
 
 # Explicit environment contradicting the binary is refused, both directions.
-( unset GGML_CUDA; export CUDA=0; resolve cache_on >/dev/null 2>&1 ) \
+( unset GGML_CUDA; export CUDA=0; refuses cache_on ) \
   && fail "CUDA=0 over a CUDA build must be refused" || true
-( unset GGML_CUDA; export CUDA=1; resolve cache_off >/dev/null 2>&1 ) \
+( unset GGML_CUDA; export CUDA=1; refuses cache_off ) \
   && fail "CUDA=1 over a CPU build must be refused" || true
 # Cache claims CUDA but nothing was built.
-( unset CUDA GGML_CUDA; resolve broken >/dev/null 2>&1 ) \
+( unset CUDA GGML_CUDA; refuses broken ) \
   && fail "GGML_CUDA=ON with no libggml-cuda must be refused" || true
 # Darwin can never resolve to CUDA.
-( unset CUDA GGML_CUDA; resolve cache_on '' darwin >/dev/null 2>&1 ) \
+( unset CUDA GGML_CUDA; refuses cache_on '' darwin ) \
   && fail "darwin must refuse a CUDA cache" || true
+
+# --- the no-cache branch, which nothing exercised before -------------------
+# No cache, no CUDA library: the environment is all there is, so it is the
+# authority and cannot contradict itself.
+[[ "$( unset CUDA GGML_CUDA; resolve nocache )" == off ]] || fail "no cache, no env -> off"
+# CUDA=1 with no cache AND no CUDA library is still refused: there is nothing to
+# put in a -cuda archive, whatever the shell believes.
+( unset GGML_CUDA; export CUDA=1; refuses nocache ) \
+  && fail "CUDA=1 with no cache and no CUDA library must be refused" || true
+
+# No cache but a CUDA library IS present: the artifacts are the authority, and an
+# explicit CUDA=0 contradicts them exactly as it would contradict a cache. This
+# used to be ignored silently, which meant the weaker-evidence path had a weaker
+# rule for no reason.
+mkdir -p "$tmp/nocache_cuda/src/ggml-cuda"; printf 'x\n' > "$tmp/nocache_cuda/src/ggml-cuda/libggml-cuda.so"
+[[ "$( unset CUDA GGML_CUDA; resolve nocache_cuda )" == on ]] || fail "no cache + cuda lib -> on"
+( unset GGML_CUDA; export CUDA=0; refuses nocache_cuda ) \
+  && fail "CUDA=0 against a tree that built CUDA must be refused even without a cache" || true
+
+# Refusal messages must name the evidence they actually read. The old wording
+# said "GGML_CUDA is ON in <dir>/CMakeCache.txt" on a path where no such file
+# exists, sending the reader to a file to check that was never there.
+msg="$( unset CUDA GGML_CUDA; export CUDA=1
+        ( as_goos linux; qwen_resolve_build_authority "$tmp/nocache" "$tmp/nocache/src" ) 2>&1 >/dev/null || true )"
+[[ "$msg" != *"according to $tmp/nocache/CMakeCache.txt"* ]] \
+  || fail "refusal cites a CMakeCache.txt that does not exist: $msg"
+[[ "$msg" == *"according to the environment"* ]] \
+  || fail "refusal must name the environment as the source it used: $msg"
+# And when there IS a cache, the message must cite it.
+msg="$( unset GGML_CUDA; export CUDA=0
+        ( as_goos linux; qwen_resolve_build_authority "$tmp/cache_on" "$tmp/cache_on/src" ) 2>&1 >/dev/null || true )"
+[[ "$msg" == *"$tmp/cache_on/CMakeCache.txt (GGML_CUDA=on)"* ]] \
+  || fail "refusal must cite the cache it read: $msg"
+
+# --- metal is a cache fact too ---------------------------------------------
+mkdir -p "$tmp/metal_off/src"
+printf 'GGML_METAL:BOOL=OFF\nGGML_CUDA:BOOL=OFF\n' > "$tmp/metal_off/CMakeCache.txt"
+[[ "$(qwen_metal_cache_state "$tmp/cache_off")" == off ]] || fail "metal cache OFF not read"
+[[ "$(qwen_metal_cache_state "$tmp/nocache")"   == unknown ]] || fail "missing metal cache must be unknown"
+mkdir -p "$tmp/metal_on/src"; printf 'GGML_METAL:BOOL=ON\nGGML_CUDA:BOOL=OFF\n' > "$tmp/metal_on/CMakeCache.txt"
+[[ "$( unset CUDA GGML_CUDA; resolve_metal metal_on '' darwin )" == on ]] || fail "darwin metal cache ON must resolve on"
+[[ "$( unset CUDA GGML_CUDA; resolve_metal metal_off '' darwin )" == off ]] || fail "darwin metal cache OFF must resolve off"
+# A darwin tree configured without Metal must not be labeled metal, or the
+# metal fail-closed leg in package_release.sh checks a claim nothing made.
+[[ "$( as_goos darwin; QWEN_METAL_AUTHORITY=off qwen_backend_hint )" == cpu ]] || fail "metal authority off -> cpu hint"
+[[ "$( as_goos darwin; QWEN_METAL_AUTHORITY=on  qwen_backend_hint )" == metal ]] || fail "metal authority on -> metal hint"
+[[ "$( as_goos darwin; unset QWEN_METAL_AUTHORITY; qwen_backend_hint )" == metal ]] || fail "no metal authority -> metal (every darwin recipe sets it)"
 
 # And the authority overrides the environment for every downstream label.
 [[ "$( as_goos linux; unset CUDA GGML_CUDA; QWEN_CUDA_AUTHORITY=on  qwen_package_suffix )" == -cuda ]] || fail "authority=on must suffix -cuda"

@@ -59,10 +59,26 @@ qwen_package_suffix() {
   fi
 }
 
+# The cmake option, spelled explicitly in both directions.
+#
+# Passing only -DGGML_CUDA=ON and nothing otherwise is not enough: cmake caches
+# the option, so a tree previously configured with CUDA=1 keeps building CUDA
+# after the variable is dropped, and the packager - reading the same env, not the
+# cache - would then label that CUDA binary "cpu". Always stating the value makes
+# the three-way agreement below a fact about the build, not just about the env.
+qwen_cuda_cmake_flag() {
+  if qwen_cuda_build; then
+    echo "-DGGML_CUDA=ON"
+  else
+    echo "-DGGML_CUDA=OFF"
+  fi
+}
+
 # install.json backend_hint. Derived from the build, never from the runtime
 # QWEN3_TTS_BACKEND override: a hint that says cuda on a CPU build is worse
 # than no hint at all. Invariant, asserted by goos_goarch_test.sh:
 #   qwen_package_suffix == "-cuda"  <=>  qwen_backend_hint == "cuda"
+#                                   <=>  qwen_cuda_cmake_flag == "-DGGML_CUDA=ON"
 qwen_backend_hint() {
   if qwen_cuda_build; then
     echo cuda

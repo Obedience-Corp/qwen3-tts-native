@@ -30,23 +30,37 @@ fi
 # obey-voice gates streaming on backend_hint=cuda, so a -cuda tarball carrying
 # a cpu hint silently disables streaming on the host it was built for.
 # Asserted for every env shape, on this host's OS.
+# Three legs, not two: the cmake option is what actually gets compiled, and it is
+# the one the other two are a claim about.
 check_agree() {
-  local label="$1" want_cuda="$2" suffix hint
+  local label="$1" want_cuda="$2" suffix hint flag
   suffix="$(qwen_package_suffix)"
   hint="$(qwen_backend_hint)"
+  flag="$(qwen_cuda_cmake_flag)"
   if [[ "$want_cuda" == yes ]]; then
     [[ "$suffix" == -cuda ]] || fail "$label: suffix want -cuda, got '$suffix'"
     [[ "$hint" == cuda ]] || fail "$label: backend_hint want cuda, got '$hint'"
+    [[ "$flag" == -DGGML_CUDA=ON ]] || fail "$label: cmake flag want -DGGML_CUDA=ON, got '$flag'"
   else
     [[ -z "$suffix" ]] || fail "$label: suffix want empty, got '$suffix'"
     [[ "$hint" != cuda ]] || fail "$label: backend_hint must not be cuda, got '$hint'"
+    [[ "$flag" == -DGGML_CUDA=OFF ]] || fail "$label: cmake flag want -DGGML_CUDA=OFF, got '$flag'"
   fi
-  # The invariant itself, independent of which branch we expected.
+  # The invariant itself, independent of which branch we expected. The cmake flag
+  # is never omitted, so a stale cmake cache cannot make the build disagree with
+  # the label.
+  [[ -n "$flag" ]] || fail "$label: cmake flag must always be stated, got empty"
   if [[ "$suffix" == -cuda ]] && [[ "$hint" != cuda ]]; then
     fail "$label: -cuda archive with backend_hint=$hint"
   fi
   if [[ "$hint" == cuda ]] && [[ "$suffix" != -cuda ]]; then
     fail "$label: backend_hint=cuda with suffix '$suffix'"
+  fi
+  if [[ "$flag" == -DGGML_CUDA=ON ]] && { [[ "$hint" != cuda ]] || [[ "$suffix" != -cuda ]]; }; then
+    fail "$label: builds CUDA but labels it $hint/'$suffix'"
+  fi
+  if [[ "$flag" == -DGGML_CUDA=OFF ]] && { [[ "$hint" == cuda ]] || [[ "$suffix" == -cuda ]]; }; then
+    fail "$label: builds CPU but labels it $hint/'$suffix'"
   fi
 }
 
@@ -74,5 +88,17 @@ done
 [[ "$( as_goos darwin; unset CUDA GGML_CUDA; qwen_backend_hint )" == metal ]] || fail "darwin hint want metal"
 [[ "$( as_goos linux;  unset CUDA GGML_CUDA; qwen_backend_hint )" == cpu   ]] || fail "linux CPU hint want cpu"
 [[ "$( as_goos linux;  CUDA=1 qwen_backend_hint )" == cuda ]] || fail "linux CUDA hint want cuda"
+
+# The CPU case must state OFF, not say nothing. A silent default is what lets a
+# cached cmake tree keep building CUDA under a cpu label.
+[[ "$( as_goos linux; unset CUDA GGML_CUDA; qwen_cuda_cmake_flag )" == -DGGML_CUDA=OFF ]] \
+  || fail "linux CPU must pass -DGGML_CUDA=OFF explicitly"
+
+# The build recipe must use the helper rather than spelling the option itself.
+recipe="$root/.justfiles/engine.just"
+grep -q 'qwen_cuda_cmake_flag' "$recipe" || fail "engine.just no longer sources the cmake flag from goos_goarch.sh"
+if grep -E '^\s*cmake_args\+=\(-DGGML_CUDA=' "$recipe" >/dev/null; then
+  fail "engine.just hardcodes -DGGML_CUDA=...; use qwen_cuda_cmake_flag"
+fi
 
 echo "goos_goarch self-check ok ($goos/$goarch, backend_hint=$(qwen_backend_hint))"

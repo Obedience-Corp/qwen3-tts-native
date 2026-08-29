@@ -65,11 +65,14 @@ build:
         cmake_args+=(-DGGML_METAL=ON)
         ;;
       Linux)
+        # Always stated, never omitted: cmake caches GGML_CUDA, so leaving it out
+        # lets a previously-CUDA tree keep building CUDA while the packager reads
+        # the env and labels the result "cpu".
+        cmake_args+=("$(qwen_cuda_cmake_flag)")
         if qwen_cuda_build; then
-          cmake_args+=(-DGGML_CUDA=ON)
           echo "Building GGML with CUDA (CUDA=1). Requires driver + toolkit (RTX 50xx: recent CUDA)."
         else
-          echo "Building GGML CPU-only. For NVIDIA GPU: CUDA=1 just engine build"
+          echo "Building GGML CPU-only (-DGGML_CUDA=OFF). For NVIDIA GPU: CUDA=1 just engine build"
         fi
         ;;
       MINGW*|MSYS*|CYGWIN*|Windows_NT)

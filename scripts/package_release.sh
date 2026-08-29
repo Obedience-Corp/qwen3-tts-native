@@ -138,7 +138,11 @@ if [[ -d "$ggml_src" ]]; then
   fi
 fi
 
-# Fail closed: Metal/CPU product packages need at least libggml + backend bits.
+# Fail closed: product packages need at least libggml + backend bits.
+# Darwin has been checked since the RPATH fix; Linux was not, so a tarball with
+# zero .so files next to the worker packaged green and only failed at the host's
+# first dlopen. Same rule, both platforms.
+shopt -s nullglob
 if [[ "$lib_glob" == "dylib" ]]; then
   if [[ ! -e "$dist/bin/libggml.0.dylib" && ! -e "$dist/bin/libggml.dylib" ]]; then
     echo "Package incomplete: no libggml*.dylib in bin/ (ggml build missing under $ggml_src)" >&2
@@ -147,6 +151,31 @@ if [[ "$lib_glob" == "dylib" ]]; then
   if [[ ! -e "$dist/bin/libggml-base.0.dylib" && ! -e "$dist/bin/libggml-base.dylib" ]]; then
     echo "Package incomplete: no libggml-base*.dylib in bin/" >&2
     exit 1
+  fi
+else
+  ggml_so=( "$dist/bin"/libggml.so* )
+  ggml_base_so=( "$dist/bin"/libggml-base.so* )
+  ggml_cpu_so=( "$dist/bin"/libggml-cpu.so* )
+  if ((${#ggml_so[@]} == 0)); then
+    echo "Package incomplete: no libggml.so* in bin/ (ggml build missing under $ggml_src)" >&2
+    exit 1
+  fi
+  if ((${#ggml_base_so[@]} == 0)); then
+    echo "Package incomplete: no libggml-base.so* in bin/" >&2
+    exit 1
+  fi
+  if ((${#ggml_cpu_so[@]} == 0)); then
+    echo "Package incomplete: no libggml-cpu.so* in bin/ (CPU backend is required even on CUDA builds — it is the scheduler fallback)" >&2
+    exit 1
+  fi
+  # A -cuda archive without the CUDA backend .so is the drift this PR exists to
+  # stop, one layer down: correct name, correct hint, no CUDA in the tarball.
+  if [[ "$pkg_suffix" == "-cuda" ]]; then
+    ggml_cuda_so=( "$dist/bin"/libggml-cuda.so* )
+    if ((${#ggml_cuda_so[@]} == 0)); then
+      echo "Package incomplete: ${name} is labeled -cuda (backend_hint=$(qwen_backend_hint)) but bin/ has no libggml-cuda.so*" >&2
+      exit 1
+    fi
   fi
 fi
 

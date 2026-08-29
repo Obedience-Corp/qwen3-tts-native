@@ -35,7 +35,16 @@ On the current pin the same host and the same harness measure `rtf_median`
 **0.475** at 0.6b and **0.603** at 1.7b — 2.6x faster, because `22277bc` brought
 chunked GPU decode and because the earlier number was an auto-backend run. See
 F8's `anchor_check`. Metal on an M4 Max is 1.33 (0.6b) / 1.87 (1.7b) for
-comparison: CUDA is the only measured configuration faster than realtime.
+comparison, so CUDA is by far the fastest measured configuration and the only one
+benchmarked across both tiers.
+
+It is **not** the only one faster than realtime. Explicit
+`QWEN3_TTS_BACKEND=cpu` on that same M4 Max measures 0.80 at 0.6b — see the macOS
+section below and `docs/latency/backend_placement_2026-08-29.json`. That figure is
+measured, not modelled, but it is n=2 on one tier on one host and has not had the
+five-fixture treatment F7/F8 got; its own bench is queued. Until then, treat CUDA
+as the validated fast path and the CPU result as a live question, not as a second
+validated configuration.
 
 ## In-repo tests
 
@@ -64,10 +73,12 @@ Measured on an M4 Max Mac Studio, 0.6b, warm worker
 (`docs/latency/backend_placement_2026-08-29.json`): AUTO/Metal `rtf` **1.30**,
 explicit `QWEN3_TTS_BACKEND=cpu` **0.80**. Pure CPU is ~1.6x faster than Metal
 for this workload on this machine and stays flat across fixture length. That is
-an observation from one tier on one host, not a recommendation — but every
-committed Metal figure assumes Metal is the fast path on Apple silicon, and at
-0.80 the 0.6b tier synthesises faster than realtime, which Metal does not. Worth
-its own bench before anything is re-pointed at it.
+an observation from one tier on one host (n=2, not the five-fixture F7/F8
+treatment), not a recommendation — but every committed Metal figure assumes Metal
+is the fast path on Apple silicon, and at 0.80 the 0.6b tier synthesises faster
+than realtime, which Metal does not. Its own bench is queued; nothing should be
+re-pointed at it before then. The support matrix above still lists Metal as the
+validated macOS backend for that reason.
 
 ### Linux CUDA (Arch + RTX 5060 Ti)
 

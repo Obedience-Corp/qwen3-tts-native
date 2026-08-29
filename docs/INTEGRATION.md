@@ -45,7 +45,9 @@ Env: `QWEN3_TTS_NATIVE_URL`, `QWEN3_TTS_NATIVE_SHA256`.
 1. Start once: `bin/qwen3-tts-worker <path-to-models>`  
    - macOS: `DYLD_LIBRARY_PATH=<install>/bin` if needed  
    - Linux: `LD_LIBRARY_PATH=<install>/bin` if `$ORIGIN` rpath is missing  
-   - Linux + NVIDIA (CUDA package): `QWEN3_TTS_BACKEND=cuda`  
+   - Linux + NVIDIA (CUDA package): `QWEN3_TTS_BACKEND=cuda` on engine pins before
+     the AUTO-placement fix; after it, auto already picks CUDA0 — see
+     [PLATFORMS.md](PLATFORMS.md#linux-cuda-arch--rtx-5060-ti)  
 2. Speak protocol v1 on stdin/stdout ([PROTOCOL.md](PROTOCOL.md)).
 3. Prefer **worker** over CLI for multi-turn latency (model stays loaded).
 

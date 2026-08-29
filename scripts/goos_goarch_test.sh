@@ -180,6 +180,15 @@ msg="$( unset GGML_CUDA; export CUDA=0
         ( as_goos linux; qwen_resolve_build_authority "$tmp/cache_on" "$tmp/cache_on/src" ) 2>&1 >/dev/null || true )"
 [[ "$msg" == *"$tmp/cache_on/CMakeCache.txt (GGML_CUDA=on)"* ]] \
   || fail "refusal must cite the cache it read: $msg"
+# Darwin, cache OFF but a stale CUDA artifact present: the refusal fires on the
+# artifact, so it must cite the artifact — not a cache that reads off.
+mkdir -p "$tmp/darwin_stale/src/ggml-cuda"
+printf 'GGML_CUDA:BOOL=OFF\nGGML_METAL:BOOL=ON\n' > "$tmp/darwin_stale/CMakeCache.txt"
+printf 'x\n' > "$tmp/darwin_stale/src/ggml-cuda/libggml-cuda.dylib"
+msg="$( unset CUDA GGML_CUDA
+        ( as_goos darwin; qwen_resolve_build_authority "$tmp/darwin_stale" "$tmp/darwin_stale/src" ) 2>&1 >/dev/null || true )"
+[[ "$msg" == *"built artifacts"* && "$msg" != *"GGML_CUDA=off"* ]] \
+  || fail "darwin stale-artifact refusal must cite the artifacts, not the off cache: $msg"
 
 # --- metal is a cache fact too ---------------------------------------------
 mkdir -p "$tmp/metal_off/src"

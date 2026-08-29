@@ -51,15 +51,27 @@ for a in "$@"; do
 done
 if [[ -n "$build" ]]; then
   mkdir -p "$build"
+  # Mirror real cmake: one entry per key, LAST -D wins, an explicit type
+  # (-DFOO:STRING=ON) is preserved, an untyped -DFOO=ON lands as BOOL because
+  # ggml declares these via option(). -C initial-cache files are NOT emulated —
+  # a seeded FORCE value is invisible here (the packager reading the real cache
+  # still labels such a build correctly; this stub only vouches for -D).
   for a in "$@"; do
     case "$a" in
       -D*=*)
         kv="${a#-D}"; key="${kv%%=*}"; val="${kv#*=}"
-        key="${key%%:*}"                       # -DFOO:BOOL=ON -> FOO
-        printf '%s:BOOL=%s\n' "$key" "$val" >> "$build/CMakeCache.txt"
+        case "$key" in
+          *:*) type="${key##*:}"; key="${key%%:*}" ;;
+          *)   type=BOOL ;;
+        esac
+        printf '%s\t%s\t%s\n' "$key" "$type" "$val" >> "$build/.cmake_args"
         ;;
     esac
   done
+  if [[ -f "$build/.cmake_args" ]]; then
+    awk -F'\t' '{t[$1]=$2; v[$1]=$3} END{for (k in t) printf "%s:%s=%s\n", k, t[k], v[k]}' \
+      "$build/.cmake_args" > "$build/CMakeCache.txt"
+  fi
 fi
 exit 0
 STUB
@@ -107,6 +119,18 @@ run_build() {
   esac
   [[ "$cache_state" == "$want_state" ]] \
     || fail "$label: cache reads '$cache_state', want '$want_state'"
+
+  # Metal is under the same authority: every darwin recipe must state
+  # -DGGML_METAL=ON exactly once, and the cache must read it back.
+  if [[ "$os" == Darwin ]]; then
+    local mflags mcount
+    mflags="$(tr ' ' '\n' < "$log" | grep -E '^-DGGML_METAL(:[A-Z]+)?=' || true)"
+    mcount="$(printf '%s' "$mflags" | grep -c . || true)"
+    [[ "$mcount" -eq 1 && "${mflags#*=}" == ON ]] \
+      || fail "$label: darwin cmake must get -DGGML_METAL=ON exactly once, got: ${mflags:-<none>}"
+    [[ "$(qwen_metal_cache_state "$repo/third_party/qwen3-tts.cpp/ggml/build")" == on ]] \
+      || fail "$label: darwin cache does not read GGML_METAL=on"
+  fi
 
   # And the label the packager would then produce must match the compiled fact.
   local hint suffix

@@ -169,7 +169,11 @@ qwen_resolve_build_authority() {
     # ignores them here too rather than refusing — one behaviour for one input.
     # A darwin tree that actually built CUDA is broken, and that is worth a stop.
     if [[ "$cache" == on || "$artifact" == on ]]; then
-      echo "Refusing to package: CUDA is ON according to $source, on darwin. Apple builds are Metal." >&2
+      # $source tracks the resolved CUDA authority; when only a stale artifact
+      # tripped this gate, cite the artifact, not a cache that says off.
+      local why="$source"
+      [[ "$cache" != on ]] && why="the built artifacts under $ggml_src (libggml-cuda present)"
+      echo "Refusing to package: CUDA is ON according to $why, on darwin. Apple builds are Metal." >&2
       return 1
     fi
     echo "off $metal"

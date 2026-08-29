@@ -55,20 +55,25 @@ build:
     fi
     os="$(uname -s)"
     nproc_j="$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
+    # shellcheck source=../scripts/goos_goarch.sh
+    source "$root/scripts/goos_goarch.sh"
     cmake_args=()
-    backend_note="cpu"
+    # Same helper the packager uses, so what we compile is what install.json says.
+    backend_note="$(qwen_backend_hint)"
     case "$os" in
       Darwin)
         cmake_args+=(-DGGML_METAL=ON)
-        backend_note="metal"
         ;;
       Linux)
-        if [[ "${CUDA:-}" == "1" || "${CUDA:-}" == "true" || "${GGML_CUDA:-}" == "1" ]]; then
-          cmake_args+=(-DGGML_CUDA=ON)
-          backend_note="cuda"
+        # Always stated, never omitted, and never spelled here: cmake caches the
+        # option, so leaving it out lets a previously-CUDA tree keep building
+        # CUDA. goos_goarch.sh owns the literal so the self-test can insist this
+        # file contains none.
+        cmake_args+=("$(qwen_cuda_cmake_flag)")
+        if qwen_cuda_build; then
           echo "Building GGML with CUDA (CUDA=1). Requires driver + toolkit (RTX 50xx: recent CUDA)."
         else
-          echo "Building GGML CPU-only. For NVIDIA GPU: CUDA=1 just engine build"
+          echo "Building GGML CPU-only (CUDA explicitly off). For NVIDIA GPU: CUDA=1 just engine build"
         fi
         ;;
       MINGW*|MSYS*|CYGWIN*|Windows_NT)

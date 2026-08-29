@@ -1,0 +1,149 @@
+{
+  "schema": "qwen.placement.v1",
+  "id": "backend-placement-2026-08-29",
+  "measured_at": "2026-08-29T10:20:00Z",
+  "subject": "Engine AUTO backend placement: weight buffers vs compute backends, before and after Obedience-Corp/qwen3-tts.cpp#3",
+  "issue": "https://github.com/Obedience-Corp/qwen3-tts-native/issues/5",
+
+  "what_this_measures": [
+    "Which device each component's WEIGHT BUFFER lands on versus which device its COMPUTE backend uses, under QWEN3_TTS_BACKEND unset (AUTO) and =cpu.",
+    "Warm worker RTF for the same three configurations, so the placement change can be priced.",
+    "It does NOT measure CUDA. The CUDA leg is listed under not_measured and is the open gate on the engine PR."
+  ],
+
+  "engine": {
+    "repo": "Obedience-Corp/qwen3-tts.cpp",
+    "before_sha": "ec40d0b (main; == docs/ENGINE_PIN.txt ed7312b + its merge commit)",
+    "after_sha": "d2629ae (fix/worker-auto-placement, PR #3)",
+    "ggml_submodule": "3af5f5760e19a96427f5f7a93b79cbdf3d4b265b",
+    "diagnostics_note": "The 'Weight buffer:' line ships with the fix. To read the BEFORE placement, ec40d0b was rebuilt with only those two fprintf calls added and nothing else, so the before/after banner comparison isolates placement from behaviour."
+  },
+
+  "machines": [
+    {
+      "role": "metal",
+      "hostname": "Mac-Studio",
+      "chip": "Apple M4 Max (16 cores)",
+      "memory": "128 GB",
+      "os": "macOS 26.5 (25F71) arm64",
+      "power": "desktop, AC",
+      "concurrent_load": "Shared machine. A Virtualization.framework VM held ~100% of one core throughout (steady, present for the committed Metal baselines too), Ollama's llama-server idled at ~30%, and Spotlight indexed intermittently. Load average during the reported runs was 4-10. Runs taken while a peer session drove load average to 60-130 are listed in discarded_runs and are excluded."
+    }
+  ],
+
+  "harness": {
+    "command": "go run ./cmd/warm-bench -worker <build>/qwen3-tts-worker -models models -iters N -fixtures F1_anchor,F4_long_sentence",
+    "schema": "qwen.warmbench.v1",
+    "tier": "0.6b",
+    "preset": "Vivian",
+    "warmup": "one synthesis after worker ready, discarded",
+    "rtf": "synthesis wall time / audio duration; >1.0 is slower than realtime",
+    "worker": "qwen3-tts-native tools/worker_main.c compiled against each engine build's libqwen3tts.dylib, rpath @loader_path",
+    "note": "Both workers are byte-identical C compiled the same way; only the linked engine library differs."
+  },
+
+  "placement": {
+    "method": "qwen3-tts-cli, same 0.6b model dir, banner lines only. Deterministic - independent of machine load.",
+    "before_auto": {
+      "TTSTransformer": {"weight_buffer": "MTL0", "compute_backend": "MTL0", "agree": true},
+      "AudioTokenizerDecoder": {"weight_buffer": "CPU", "compute_backend": "MTL0", "agree": false}
+    },
+    "after_auto": {
+      "TTSTransformer": {"weight_buffer": "MTL0", "compute_backend": "MTL0", "agree": true},
+      "AudioTokenizerDecoder": {"weight_buffer": "MTL0", "compute_backend": "MTL0", "agree": true}
+    },
+    "before_cpu_explicit": {
+      "TTSTransformer": {"weight_buffer": "CPU", "compute_backend": "CPU", "agree": true},
+      "AudioTokenizerDecoder": {"weight_buffer": "CPU", "compute_backend": "CPU", "agree": true}
+    },
+    "after_cpu_explicit": {
+      "TTSTransformer": {"weight_buffer": "CPU", "compute_backend": "CPU", "agree": true},
+      "AudioTokenizerDecoder": {"weight_buffer": "CPU", "compute_backend": "CPU", "agree": true}
+    },
+    "finding": "Metal was mis-placing too. The issue assumed Metal was fine and that the split was CLI-vs-worker; it is neither. AudioTokenizerDecoder::load_model passed GGML_BACKEND_DEVICE_TYPE_IGPU as a weight-buffer hint, and no device on either target reports IGPU (ggml-metal returns GPU; ggml-cuda returns GPU on anything that is not a Jetson, integrated detection being disabled upstream). The hint therefore always fell back to CPU under AUTO, on every host, in both the CLI and the worker. The CUDA measurements that looked CLI-vs-worker were CLI runs taken with QWEN3_TTS_BACKEND=cuda set."
+  },
+
+  "results_metal": {
+    "auto_before": {
+      "rtf_median_per_run": [1.306, 1.304, 1.291],
+      "rtf_median": 1.304,
+      "rtf_observed_range": [1.286, 1.320],
+      "runs": 3,
+      "iters_per_run": 3,
+      "fixtures": ["F1_anchor", "F4_long_sentence"]
+    },
+    "auto_after": {
+      "rtf_median_per_run": [1.351, 1.356],
+      "rtf_median": 1.353,
+      "rtf_observed_range": [1.333, 1.470],
+      "runs": 2,
+      "iters_per_run": 3,
+      "fixtures": ["F1_anchor", "F4_long_sentence"]
+    },
+    "cpu_explicit_before": {"rtf_median": 0.802, "rtf_observed_range": [0.797, 0.806]},
+    "cpu_explicit_after": {"rtf_median": 0.804, "rtf_observed_range": [0.801, 0.808]},
+    "delta_auto": "+3.8% (1.304 -> 1.353). A regression, small and reproducible.",
+    "delta_cpu_explicit": "+0.2%, inside run-to-run noise. Explicit CPU is unchanged, as expected: that path never had two answers."
+  },
+
+  "decode_split_metal": {
+    "method": "qwen3-tts-cli single-shot on the F4 fixture text, 3 runs each, quiet machine. Timing block excludes model load. Normalised to milliseconds of vocoder decode per second of produced audio, because sampling makes audio duration vary run to run.",
+    "before_ms_decode_per_audio_s": [326, 329, 328],
+    "after_ms_decode_per_audio_s": [384, 406, 384],
+    "delta": "+19% vocoder decode",
+    "reading": "The whole regression is the vocoder, and it lands exactly where the placement moved. Decode is ~26% of Metal synthesis, so +19% on decode is ~+4% end to end - the number measured independently by the warm bench. On an M4 Max the conv-heavy vocoder is genuinely faster with its weights in a CPU buffer than on the GPU. The pre-fix Metal advantage was real, but it was an accident of a hint that never matched anything, not a decision."
+  },
+
+  "metal_cpu_is_faster_than_metal": {
+    "finding": "On this M4 Max, QWEN3_TTS_BACKEND=cpu measures rtf 0.80 while AUTO/Metal measures 1.29-1.35. Pure CPU is ~1.6x faster than Metal for 0.6b, and flat across fixture length (F4, 9.4-10.1 s of audio: 0.797-0.802).",
+    "why_it_matters": "Every committed Metal figure - F7's 1.37, the 1.33 cross-backend comparison, the Stage B prebuffer reasoning - assumes Metal is the fast path on Apple silicon. At 0.80 the 0.6b tier synthesises faster than realtime on CPU alone, which is the throughput gate F7 recorded as failing on Metal.",
+    "status": "Observation from this run, not a claim about the product. It was measured with the same committed harness and the same fixtures as F7/F8, but with n=2 iterations on one tier and one machine. It deserves its own bench before anything is re-pointed at it.",
+    "not_caused_by_this_change": "Both engine builds measure it identically (0.802 before, 0.804 after)."
+  },
+
+  "experiments": {
+    "chunked_decode_on_metal": {
+      "question": "Does QWEN3_TTS_DECODER_CHUNKED=1 recover the 4% once the vocoder weights are on Metal?",
+      "result": "No. rtf_median 1.529 - worse than both arms. Chunking exists for CUDA VRAM ceilings and costs recomputed left context; on Metal it only adds overhead.",
+      "conclusion": "Not a mitigation. Left off by default, as it already is."
+    }
+  },
+
+  "open_question": {
+    "title": "Should the vocoder keep CPU weights on Metal?",
+    "detail": "PR #3 gives the engine one placement policy: weights follow compute. That is what fixes CUDA, and it is the shape the campaign keeps asking for - one decision, one place. It also costs ~4% on Metal, because on this hardware the vocoder really is faster on the CPU. Preserving that would mean a per-component, per-backend exception, which is the same shape as the bug being removed, so it is not being smuggled into the fix. If it is wanted it should be a named, measured policy with these numbers attached, decided deliberately.",
+    "materiality": "Low urgency. Metal 0.6b is 1.29 before and 1.35 after; both are slower than realtime and neither changes what the Mac product can do. The CUDA side is 1.68-1.71 versus 0.459 - the Stage B throughput gate. And if the CPU result above holds, the interesting Apple-silicon question is not Metal placement at all."
+  },
+
+  "not_measured": {
+    "cuda": "archdtop (RTX 5060 Ti) was unreachable during this window: Tailscale SSH is in check mode and requires a browser approval from Lance, and the LAN sshd at 192.168.0.18 rejects every key on this Mac. The CUDA before/after is the open gate on qwen3-tts.cpp#3; the expected result is that the AUTO worker logs 'Weight buffer: CUDA0' for AudioTokenizerDecoder where it previously logged CPU, and that AUTO rtf converges from 1.68-1.71 onto the explicit-cuda 0.459-0.475.",
+    "tier_1_7b": "Only 0.6b was measured. The placement change is tier-independent by construction, but the RTF cost was not re-measured at 1.7b.",
+    "speaker_encoder": "AudioTokenizerEncoder is loaded lazily and unused when synthesising from a baked preset, so its weight buffer moved from CPU to MTL0 without being exercised here.",
+    "ttfa": "Stage A worker, streaming=false. Every wall figure is whole-utterance wall."
+  },
+
+  "discarded_runs": {
+    "reason": "A concurrent session on this Mac ran ~20 parallel CPU jobs and later a set of `yes` spinners, driving load average to 60-130. Under that load the pre-fix arm - which runs the vocoder on the CPU - is penalised far more than the post-fix arm, so the A/B ratio is inflated in the fix's favour. These runs are recorded so nobody re-derives a better-looking number from them.",
+    "samples": [
+      {"build": "before", "load": 71, "rtf_median": 3.566},
+      {"build": "after", "load": 76, "rtf_median": 2.219},
+      {"build": "before", "load": 45, "rtf_median": 2.431},
+      {"build": "after", "load": 32, "rtf_median": 3.114},
+      {"build": "before", "load": 5, "rtf_median": 1.375},
+      {"build": "after", "load": 10, "rtf_median": 3.190}
+    ]
+  },
+
+  "commands": [
+    "# engine, both arms, from a fresh clone of Obedience-Corp/qwen3-tts.cpp",
+    "cmake -S ggml -B ggml/build -DGGML_METAL=ON && cmake --build ggml/build -j10",
+    "cmake -S . -B build && cmake --build build -j10",
+    "cc -O2 -I<engine>/src -L<lib> -Wl,-rpath,@loader_path -o qwen3-tts-worker tools/worker_main.c -lqwen3tts -lm -lpthread",
+    "# placement banner",
+    "./build/qwen3-tts-cli -m models -t 'Placement probe.' -o /tmp/probe.wav 2>&1 | grep -E 'Weight buffer:|backend:'",
+    "# warm RTF, AUTO",
+    "QWEN3_TTS_TIER=0.6b go run ./cmd/warm-bench -worker <build>/qwen3-tts-worker -models models -iters 3 -fixtures F1_anchor,F4_long_sentence",
+    "# warm RTF, explicit CPU",
+    "QWEN3_TTS_TIER=0.6b QWEN3_TTS_BACKEND=cpu go run ./cmd/warm-bench -worker <build>/qwen3-tts-worker -models models -iters 2 -fixtures F1_anchor,F4_long_sentence"
+  ]
+}

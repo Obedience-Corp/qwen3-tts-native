@@ -12,7 +12,7 @@ host smoke with real GGUF assets, emitted valid 24 kHz mono `f32le` PCM, and
 | Platform | Models | Build recipes | Release package | Backend | Status |
 |----------|--------|---------------|-----------------|---------|--------|
 | **macOS arm64** | Yes | Yes | Yes (`darwin-arm64`) | Metal | **Validated** (latency + platform smoke) |
-| **Linux amd64 CPU** | Yes | Yes | Yes (`linux-amd64`) | CPU | Recipes ready; ship as the default linux/amd64 pin |
+| **Linux amd64 CPU** | Yes | Yes | Yes (`linux-amd64`) | CPU | **Shipped** in [v0.1.1](https://github.com/Obedience-Corp/qwen3-tts-native/releases/tag/v0.1.1); the default linux/amd64 pin |
 | **Linux amd64 CUDA** | Yes | Yes (`CUDA=1`) | Yes (`linux-amd64-cuda`) | NVIDIA CUDA | **Validated** — EndeavourOS/Arch + **RTX 5060 Ti 16GB** |
 | **Linux aarch64** | Yes | Same | Same | CPU or CUDA | Best-effort (untested) |
 | **Windows x64** | Yes | Not in `just` yet | No | CPU / CUDA later | Planned |
@@ -21,11 +21,21 @@ host smoke with real GGUF assets, emitted valid 24 kHz mono `f32le` PCM, and
 
 | Host | Role | Evidence |
 |------|------|----------|
-| Apple Silicon Mac (e.g. M4 Max) | macOS Metal | `docs/latency/worker_warmish.json` |
-| **EndeavourOS/Arch + RTX 5060 Ti 16GB** | Linux CUDA | `docs/latency/platform_Linux_x86_64_cuda.json` |
+| Apple Silicon Mac (M4 Max) | macOS Metal | `docs/latency/worker_warmish.json`, `docs/latency/backend_placement_2026-08-29.json` |
+| **Arch + RTX 5060 Ti 16GB** (`archdtop`) | Linux CUDA | `docs/latency/platform_Linux_x86_64_cuda.json`, `docs/latency/stage_b_streaming_2026-08-27.json`, obey-voice `docs/benchmarks/F8-qwen-tts-cuda-2026-08-27.json` |
 
-Validated Linux host (2026-07-29): driver **610.43.03**, CUDA toolkit **13.3**,
-engine `b3ba140`, CUDA confirmed (`TTSTransformer backend: CUDA0`).
+Validated Linux host, last re-anchored 2026-08-27: Arch (kernel 7.1.3-arch1-3),
+driver **610.43.03**, CUDA toolkit **13.3**, engine `ed7312b` (stage-A anchor
+measured on its base `22277bc`), CUDA confirmed (`TTSTransformer backend: CUDA0`,
+`AudioTokenizerDecoder backend: CUDA0`).
+
+The 2026-07-29 entry on this host (engine `b3ba140`, `platform_Linux_x86_64_cuda.json`)
+is kept for provenance but its **0.6b CUDA RTF 1.23 is retired, not a target**.
+On the current pin the same host and the same harness measure `rtf_median`
+**0.475** at 0.6b and **0.603** at 1.7b — 2.6x faster, because `22277bc` brought
+chunked GPU decode and because the earlier number was an auto-backend run. See
+F8's `anchor_check`. Metal on an M4 Max is 1.33 (0.6b) / 1.87 (1.7b) for
+comparison: CUDA is the only measured configuration faster than realtime.
 
 ## In-repo tests
 
@@ -50,23 +60,53 @@ just engine worker
 just release package
 ```
 
+Measured on an M4 Max Mac Studio, 0.6b, warm worker
+(`docs/latency/backend_placement_2026-08-29.json`): AUTO/Metal `rtf` **1.30**,
+explicit `QWEN3_TTS_BACKEND=cpu` **0.80**. Pure CPU is ~1.6x faster than Metal
+for this workload on this machine and stays flat across fixture length. That is
+an observation from one tier on one host, not a recommendation — but every
+committed Metal figure assumes Metal is the fast path on Apple silicon, and at
+0.80 the 0.6b tier synthesises faster than realtime, which Metal does not. Worth
+its own bench before anything is re-pointed at it.
+
 ### Linux CUDA (Arch + RTX 5060 Ti)
 
 ```bash
-ENGINE_SHA=b3ba14077cf1b3e11b86e5f84aa9184605c89b28 just engine pin
-CUDA=1 just engine build
+just engine pin                  # docs/ENGINE_PIN.txt (currently ed7312b)
+CUDA=1 just engine build         # or GGML_CUDA=1 — same flag, one source of truth
 just engine worker
 just harness test
 REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 just bench platform-cuda
 ```
 
+`CUDA=1` (or `GGML_CUDA=1`) decides three things at once — `-DGGML_CUDA=ON`,
+the `-cuda` tarball suffix, and `install.json`'s `backend_hint` — from the one
+helper in `scripts/goos_goarch.sh`. They cannot disagree; `just harness test`
+asserts it. `QWEN3_TTS_BACKEND` is a **runtime** override and deliberately does
+not reach `backend_hint`: a hint that claims `cuda` on a CPU build is worse than
+no hint, because host apps gate features on it.
+
 Runtime:
 
 ```bash
 export LD_LIBRARY_PATH=<install>/bin${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-export QWEN3_TTS_BACKEND=cuda
 <install>/bin/qwen3-tts-worker <install>/models
 ```
+
+**Backend selection.** With `QWEN3_TTS_BACKEND` unset the engine auto-selects
+`IGPU -> GPU -> ACCEL -> CPU` and places weights and compute on the same device.
+On engine pins **before** the AUTO-placement fix
+([qwen3-tts.cpp#3](https://github.com/Obedience-Corp/qwen3-tts.cpp/pull/3)) the
+vocoder's weight buffer fell back to CPU while its compute stayed on CUDA0, so
+leaving the variable unset cost ~3.5x on this host (0.6b F1 `rtf` 1.68-1.71 vs
+0.459 explicit) — see F8's `backend_gotcha`. **Export `QWEN3_TTS_BACKEND=cuda` on
+such a pin.** Once the pin includes the fix the export is only an override, and
+each component prints `Weight buffer: <device>` next to its
+`<Component> backend: <device>` line so a mismatch is visible in the worker log.
+
+The same hint was broken on Metal — the decoder's weights sat in a CPU buffer
+there too, on every pin, in the CLI as well as the worker. Details and the
+before/after banners: `docs/latency/backend_placement_2026-08-29.json`.
 
 ### Linux CPU
 
@@ -104,4 +144,7 @@ qwen3-tts-native-linux-amd64-cuda.tar.gz
 ```
 
 `install.json` records `os`/`arch` as Go's GOOS/GOARCH (`linux`/`amd64`,
-`darwin`/`arm64`) plus `bin.lib` (`.dylib` or `.so`) and `backend_hint`.
+`darwin`/`arm64`) plus `bin.lib` (`.dylib` or `.so`) and `backend_hint`
+(`metal` on darwin, `cuda` on a CUDA build, else `cpu`). The `-cuda` suffix and
+`backend_hint: "cuda"` always travel together — both come from
+`qwen_cuda_build()` in `scripts/goos_goarch.sh`.

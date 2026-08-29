@@ -22,12 +22,14 @@ arch="$(qwen_goarch)"
 
 # The built tree, not the shell, decides whether this is a CUDA package.
 # CMakeCache.txt is ground truth; the environment only states an intent, and the
-# two drift in both directions (see qwen_resolve_cuda_build). Everything below —
+# two drift in both directions (see qwen_resolve_build_authority). Everything below —
 # the -cuda suffix, install.json's backend_hint, and which ggml backends get
 # copied — reads from this one answer.
 ggml_src="$engine/ggml/build/src"
-QWEN_CUDA_AUTHORITY="$(qwen_resolve_cuda_build "$engine/ggml/build" "$ggml_src")" || exit 1
-export QWEN_CUDA_AUTHORITY
+build_authority="$(qwen_resolve_build_authority "$engine/ggml/build" "$ggml_src")" || exit 1
+QWEN_CUDA_AUTHORITY="${build_authority%% *}"
+QWEN_METAL_AUTHORITY="${build_authority##* }"
+export QWEN_CUDA_AUTHORITY QWEN_METAL_AUTHORITY
 
 pkg_suffix="$(qwen_package_suffix)"
 

@@ -279,13 +279,9 @@ INNER
 )
 fi
 
-# Backend hint for install.json (not a hard guarantee — runtime may select)
-backend="cpu"
-if [[ "$os" == "darwin" ]]; then
-  backend="metal"
-elif [[ "${CUDA:-}" == "1" || "${CUDA:-}" == "true" ]] || [[ -n "${QWEN3_TTS_BACKEND:-}" ]]; then
-  backend="${QWEN3_TTS_BACKEND:-cuda}"
-fi
+# Backend hint for install.json (not a hard guarantee — runtime may select).
+# Same source of truth as the -cuda filename suffix; see scripts/goos_goarch.sh.
+backend="$(qwen_backend_hint)"
 
 cat > "$dist/install.json" <<EOF
 {

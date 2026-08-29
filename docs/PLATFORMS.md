@@ -97,6 +97,17 @@ asserts it. `QWEN3_TTS_BACKEND` is a **runtime** override and deliberately does
 not reach `backend_hint`: a hint that claims `cuda` on a CPU build is worse than
 no hint, because host apps gate features on it.
 
+At **package** time the environment stops being the authority and
+`ggml/build/CMakeCache.txt` takes over, because cmake caches `GGML_CUDA` and the
+two drift in both directions: `CUDA=1 just engine build` followed by a bare
+`just release package` used to emit a `linux-amd64` archive with
+`backend_hint: cpu` that carried `libggml-cuda.so`, and a reconfigure back to
+CPU left a stale `libggml-cuda.so` that got copied in anyway. The packager now
+names the archive after what was compiled, ships the CUDA backend only in a
+`-cuda` archive, and **refuses** when the environment contradicts the cache
+rather than picking one. You therefore do not repeat `CUDA=1` for
+`just release package`.
+
 Runtime:
 
 ```bash

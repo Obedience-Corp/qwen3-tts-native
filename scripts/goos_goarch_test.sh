@@ -95,10 +95,61 @@ done
   || fail "linux CPU must pass -DGGML_CUDA=OFF explicitly"
 
 # The build recipe must use the helper rather than spelling the option itself.
+# Matching the exact `cmake_args+=(-DGGML_CUDA=` line was too narrow — quoting it,
+# adding a space, appending it to the cmake command, or building the array a
+# different way all slipped past. The rule is now total: goos_goarch.sh owns the
+# literal, engine.just may not contain it in any spelling.
 recipe="$root/.justfiles/engine.just"
 grep -q 'qwen_cuda_cmake_flag' "$recipe" || fail "engine.just no longer sources the cmake flag from goos_goarch.sh"
-if grep -E '^\s*cmake_args\+=\(-DGGML_CUDA=' "$recipe" >/dev/null; then
-  fail "engine.just hardcodes -DGGML_CUDA=...; use qwen_cuda_cmake_flag"
+if grep -F -- '-DGGML_CUDA=' "$recipe" >/dev/null; then
+  fail "engine.just spells -DGGML_CUDA= itself; the literal belongs to qwen_cuda_cmake_flag"
 fi
+
+# ---------------------------------------------------------------------------
+# Build authority: the packager must describe the binary, not the shell.
+# ---------------------------------------------------------------------------
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+mkcache() { mkdir -p "$tmp/$1"; printf 'GGML_METAL:BOOL=OFF\nGGML_CUDA:BOOL=%s\n' "$2" > "$tmp/$1/CMakeCache.txt"; }
+mksrc()   { mkdir -p "$tmp/$1/src/ggml-cuda"; [[ "$2" == on ]] && printf 'x\n' > "$tmp/$1/src/ggml-cuda/libggml-cuda.so"; return 0; }
+
+mkcache cache_on ON;    mksrc cache_on on
+mkcache cache_off OFF;  mksrc cache_off off
+mkcache stale OFF;      mksrc stale on          # reconfigured to OFF, old .so left behind
+mkcache broken ON;      mksrc broken off        # claims CUDA, built none
+mkdir -p "$tmp/nocache/src"
+
+[[ "$(qwen_cuda_cache_state "$tmp/cache_on")"  == on ]]      || fail "cache ON not read"
+[[ "$(qwen_cuda_cache_state "$tmp/cache_off")" == off ]]     || fail "cache OFF not read"
+[[ "$(qwen_cuda_cache_state "$tmp/nocache")"   == unknown ]] || fail "missing cache must be unknown"
+
+resolve() { ( as_goos "${3:-linux}"; qwen_resolve_cuda_build "$tmp/$1" "$tmp/$1/src" 2>/dev/null ); }
+
+# RELEASE.md step 5 verbatim: built with CUDA=1, packaged with nothing set.
+# The cache wins, quietly, and the package is labeled cuda instead of cpu.
+[[ "$( unset CUDA GGML_CUDA; resolve cache_on )" == on ]] \
+  || fail "CUDA build + unset env must resolve to cuda from the cache"
+# Stale libggml-cuda.so after a reconfigure to OFF: still a CPU package.
+[[ "$( unset CUDA GGML_CUDA; resolve stale )" == off ]] \
+  || fail "stale libggml-cuda must not make a CPU build look like CUDA"
+[[ "$( unset CUDA GGML_CUDA; resolve cache_off )" == off ]] || fail "CPU cache must resolve off"
+
+# Explicit environment contradicting the binary is refused, both directions.
+( unset GGML_CUDA; export CUDA=0; resolve cache_on >/dev/null 2>&1 ) \
+  && fail "CUDA=0 over a CUDA build must be refused" || true
+( unset GGML_CUDA; export CUDA=1; resolve cache_off >/dev/null 2>&1 ) \
+  && fail "CUDA=1 over a CPU build must be refused" || true
+# Cache claims CUDA but nothing was built.
+( unset CUDA GGML_CUDA; resolve broken >/dev/null 2>&1 ) \
+  && fail "GGML_CUDA=ON with no libggml-cuda must be refused" || true
+# Darwin can never resolve to CUDA.
+( unset CUDA GGML_CUDA; resolve cache_on '' darwin >/dev/null 2>&1 ) \
+  && fail "darwin must refuse a CUDA cache" || true
+
+# And the authority overrides the environment for every downstream label.
+[[ "$( as_goos linux; unset CUDA GGML_CUDA; QWEN_CUDA_AUTHORITY=on  qwen_package_suffix )" == -cuda ]] || fail "authority=on must suffix -cuda"
+[[ "$( as_goos linux; unset CUDA GGML_CUDA; QWEN_CUDA_AUTHORITY=on  qwen_backend_hint )"   == cuda  ]] || fail "authority=on must hint cuda"
+[[ "$( as_goos linux; export CUDA=1;        QWEN_CUDA_AUTHORITY=off qwen_backend_hint )"   == cpu   ]] || fail "authority=off must beat CUDA=1"
+[[ -z "$( as_goos linux; export CUDA=1;     QWEN_CUDA_AUTHORITY=off qwen_package_suffix )" ]]          || fail "authority=off must beat CUDA=1 for the suffix"
 
 echo "goos_goarch self-check ok ($goos/$goarch, backend_hint=$(qwen_backend_hint))"

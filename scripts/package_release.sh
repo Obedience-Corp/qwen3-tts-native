@@ -19,6 +19,16 @@ source "$root/scripts/goos_goarch.sh"
 # by host apps. linux/x86_64 would be rejected on linux/amd64.
 os="$(qwen_goos)"
 arch="$(qwen_goarch)"
+
+# The built tree, not the shell, decides whether this is a CUDA package.
+# CMakeCache.txt is ground truth; the environment only states an intent, and the
+# two drift in both directions (see qwen_resolve_cuda_build). Everything below —
+# the -cuda suffix, install.json's backend_hint, and which ggml backends get
+# copied — reads from this one answer.
+ggml_src="$engine/ggml/build/src"
+QWEN_CUDA_AUTHORITY="$(qwen_resolve_cuda_build "$engine/ggml/build" "$ggml_src")" || exit 1
+export QWEN_CUDA_AUTHORITY
+
 pkg_suffix="$(qwen_package_suffix)"
 
 if [[ ! -x "$cli" ]]; then
@@ -111,7 +121,6 @@ fi
 # a lab build tree. Darwin used to only ship libqwen3tts; libggml* stayed on
 # absolute LC_RPATH into third_party/.../ggml/build — product installs then
 # failed after the lab path moved (dyld) and fell back to Kokoro mid-reply.
-ggml_src="$engine/ggml/build/src"
 if [[ -d "$ggml_src" ]]; then
   shopt -s nullglob
   if [[ "$lib_glob" == "dylib" ]]; then
@@ -123,17 +132,25 @@ if [[ -d "$ggml_src" ]]; then
         continue
       fi
       cp -a "$f" "$dist/bin/"
-    done < <(find "$ggml_src" \( -name 'libggml*.dylib' -o -name 'libggml*.*.dylib' \) -print0 2>/dev/null)
+    done < <(find "$ggml_src" \( -name 'libggml*.dylib' -o -name 'libggml*.*.dylib' \) \
+                  ! -name 'libggml-cuda*' -print0 2>/dev/null)
   else
-    for f in \
-      "$ggml_src"/libggml*.so* \
-      "$ggml_src"/ggml-cuda/libggml*.so* \
-      "$ggml_src"/ggml-cpu/libggml*.so* \
-      "$ggml_src"/ggml-base/libggml*.so* \
-      "$ggml_src"/ggml-blas/libggml*.so*
-    do
-      [[ -e "$f" ]] || continue
-      cp -a "$f" "$dist/bin/" 2>/dev/null || true
+    ggml_copy_dirs=( "$ggml_src" "$ggml_src"/ggml-cpu "$ggml_src"/ggml-base "$ggml_src"/ggml-blas )
+    # Only a CUDA package gets the CUDA backend. This used to be unconditional,
+    # so a stale libggml-cuda.so — or a CUDA build packaged with the variable
+    # unset — put a CUDA backend inside a tarball labeled cpu.
+    if qwen_cuda_build; then
+      ggml_copy_dirs+=( "$ggml_src"/ggml-cuda )
+    fi
+    for d in "${ggml_copy_dirs[@]}"; do
+      for f in "$d"/libggml*.so*; do
+        [[ -e "$f" ]] || continue
+        # Belt and braces: never let a cuda lib in through a non-cuda directory.
+        if ! qwen_cuda_build && [[ "$(basename "$f")" == libggml-cuda* ]]; then
+          continue
+        fi
+        cp -a "$f" "$dist/bin/" 2>/dev/null || true
+      done
     done
   fi
 fi
@@ -143,13 +160,33 @@ fi
 # zero .so files next to the worker packaged green and only failed at the host's
 # first dlopen. Same rule, both platforms.
 shopt -s nullglob
+require_lib() {  # $1 = human label, $2... = globs, at least one must match
+  local label="$1"; shift
+  local g
+  for g in "$@"; do
+    if compgen -G "$g" >/dev/null; then
+      return 0
+    fi
+  done
+  echo "Package incomplete: no $label in bin/ (ggml build under $ggml_src)" >&2
+  exit 1
+}
 if [[ "$lib_glob" == "dylib" ]]; then
-  if [[ ! -e "$dist/bin/libggml.0.dylib" && ! -e "$dist/bin/libggml.dylib" ]]; then
-    echo "Package incomplete: no libggml*.dylib in bin/ (ggml build missing under $ggml_src)" >&2
-    exit 1
+  require_lib "libggml*.dylib"      "$dist/bin/libggml.dylib"      "$dist/bin/libggml.0*.dylib"
+  require_lib "libggml-base*.dylib" "$dist/bin/libggml-base.dylib" "$dist/bin/libggml-base.0*.dylib"
+  # The CPU backend is the scheduler fallback every component allocates
+  # (backend_cpu in ggml_backend_sched_new), so it is required even on a Metal
+  # package. Darwin used to ship green without it.
+  require_lib "libggml-cpu*.dylib"  "$dist/bin/libggml-cpu.dylib"  "$dist/bin/libggml-cpu.0*.dylib"
+  # And a package that claims metal must actually contain Metal — the same rule
+  # as -cuda below, pointed at the platform we ship most.
+  if [[ "$(qwen_backend_hint)" == metal ]]; then
+    require_lib "libggml-metal*.dylib (backend_hint=metal)" \
+      "$dist/bin/libggml-metal.dylib" "$dist/bin/libggml-metal.0*.dylib"
   fi
-  if [[ ! -e "$dist/bin/libggml-base.0.dylib" && ! -e "$dist/bin/libggml-base.dylib" ]]; then
-    echo "Package incomplete: no libggml-base*.dylib in bin/" >&2
+  cuda_intruders=( "$dist/bin"/libggml-cuda* )
+  if ((${#cuda_intruders[@]})); then
+    echo "Package incomplete: darwin package contains ${cuda_intruders[*]##*/}" >&2
     exit 1
   fi
 else
@@ -168,14 +205,18 @@ else
     echo "Package incomplete: no libggml-cpu.so* in bin/ (CPU backend is required even on CUDA builds — it is the scheduler fallback)" >&2
     exit 1
   fi
-  # A -cuda archive without the CUDA backend .so is the drift this PR exists to
-  # stop, one layer down: correct name, correct hint, no CUDA in the tarball.
+  # Both directions of the same lie, asserted on the finished bin/ rather than on
+  # the intent that produced it.
+  ggml_cuda_so=( "$dist/bin"/libggml-cuda.so* )
   if [[ "$pkg_suffix" == "-cuda" ]]; then
-    ggml_cuda_so=( "$dist/bin"/libggml-cuda.so* )
     if ((${#ggml_cuda_so[@]} == 0)); then
       echo "Package incomplete: ${name} is labeled -cuda (backend_hint=$(qwen_backend_hint)) but bin/ has no libggml-cuda.so*" >&2
       exit 1
     fi
+  elif ((${#ggml_cuda_so[@]})); then
+    echo "Package incomplete: ${name} is labeled $(qwen_backend_hint) but bin/ carries ${ggml_cuda_so[*]##*/}" >&2
+    echo "  A cpu-labeled tarball with a CUDA backend inside is what disabled streaming on CUDA hosts." >&2
+    exit 1
   fi
 fi
 

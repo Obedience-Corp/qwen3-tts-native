@@ -9,7 +9,13 @@ single product.
 2. `just engine worker`
 3. `just convert models` (offline; Python allowed only here)
 4. `just bench smoke` / `just bench parity` as applicable
-5. `just release package` → `dist/qwen3-tts-native-<git>-<os>-<arch>.tar.gz`
+5. `just release package` → `dist/qwen3-tts-native-<git>-<os>-<arch>[-cuda].tar.gz`
+
+   Note step 1: **you do not repeat `CUDA=1` here.** The packager reads
+   `third_party/qwen3-tts.cpp/ggml/build/CMakeCache.txt` and names the archive
+   after what was compiled, so a CUDA build packages as `-cuda` with
+   `backend_hint: cuda` whether or not the variable is still set. Setting it to
+   something that contradicts the build is refused rather than guessed.
 6. Publish a GitHub Release with **stable asset names**:
 
 ```text

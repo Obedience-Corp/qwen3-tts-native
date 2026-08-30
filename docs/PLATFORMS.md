@@ -24,10 +24,15 @@ host smoke with real GGUF assets, emitted valid 24 kHz mono `f32le` PCM, and
 | Apple Silicon Mac (M4 Max) | macOS Metal | `docs/latency/worker_warmish.json`, `docs/latency/backend_placement_2026-08-29.json` |
 | **Arch + RTX 5060 Ti 16GB** (`archdtop`) | Linux CUDA | `docs/latency/platform_Linux_x86_64_cuda.json`, `docs/latency/stage_b_streaming_2026-08-27.json`, obey-voice `docs/benchmarks/F8-qwen-tts-cuda-2026-08-27.json` |
 
-Validated Linux host, last re-anchored 2026-08-27: Arch (kernel 7.1.3-arch1-3),
-driver **610.43.03**, CUDA toolkit **13.3**, engine `ed7312b` (stage-A anchor
-measured on its base `22277bc`), CUDA confirmed (`TTSTransformer backend: CUDA0`,
-`AudioTokenizerDecoder backend: CUDA0`).
+Validated Linux host, last re-anchored 2026-08-29: Arch (kernel 7.1.3-arch1-3),
+driver **610.43.03**, CUDA toolkit **13.3**, engine `780a0a4` (stage-A anchor
+measured on `22277bc`, streaming on `ed7312b`), CUDA confirmed
+(`TTSTransformer backend: CUDA0`, `AudioTokenizerDecoder backend: CUDA0`).
+
+On this pin **`QWEN3_TTS_BACKEND` no longer has to be set on this host**: with it
+unset the warm bench measures `rtf_median` **0.476** against explicit `=cuda`'s
+**0.475**, so the 1.68-1.71 AUTO penalty behind qwen3-tts-native#5 is gone. See
+"Backend selection" below and `docs/latency/backend_placement_2026-08-29.json`.
 
 The 2026-07-29 entry on this host (engine `b3ba140`, `platform_Linux_x86_64_cuda.json`)
 is kept for provenance but its **0.6b CUDA RTF 1.23 is retired, not a target**.
@@ -83,7 +88,7 @@ validated macOS backend for that reason.
 ### Linux CUDA (Arch + RTX 5060 Ti)
 
 ```bash
-just engine pin                  # docs/ENGINE_PIN.txt (currently ed7312b)
+just engine pin                  # docs/ENGINE_PIN.txt (currently 780a0a4)
 CUDA=1 just engine build         # or GGML_CUDA=1 — same flag, one source of truth
 just engine worker
 just harness test

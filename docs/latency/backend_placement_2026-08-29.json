@@ -8,13 +8,13 @@
   "what_this_measures": [
     "Which device each component's WEIGHT BUFFER lands on versus which device its COMPUTE backend uses, under QWEN3_TTS_BACKEND unset (AUTO) and =cpu.",
     "Warm worker RTF for the same three configurations, so the placement change can be priced.",
-    "It does NOT measure CUDA. The CUDA leg is listed under not_measured and is the open gate on the engine PR."
+    "The Metal legs were measured 2026-08-29. The CUDA legs (results_cuda, g3_codebook_check) were added 2026-08-30 once archdtop was reachable; they were the gate on the engine PR."
   ],
 
   "engine": {
     "repo": "Obedience-Corp/qwen3-tts.cpp",
     "before_sha": "ec40d0b (main; == docs/ENGINE_PIN.txt ed7312b + its merge commit)",
-    "after_sha": "d2629ae (fix/worker-auto-placement, PR #3)",
+    "after_sha": "d2629ae + ad5bd18 (fix/worker-auto-placement, PR #3), merged 2026-08-30 as 780a0a4. The Metal legs were taken on the branch tip; the CUDA legs were taken on the merge commit, which is what docs/ENGINE_PIN.txt now pins.",
     "ggml_submodule": "3af5f5760e19a96427f5f7a93b79cbdf3d4b265b",
     "diagnostics_note": "The 'Weight buffer:' line ships with the fix. To read the BEFORE placement, ec40d0b was rebuilt with only those two fprintf calls added and nothing else, so the before/after banner comparison isolates placement from behaviour."
   },
@@ -28,6 +28,19 @@
       "os": "macOS 26.5 (25F71) arm64",
       "power": "desktop, AC",
       "concurrent_load": "Shared machine. A Virtualization.framework VM held ~100% of one core throughout (steady, present for the committed Metal baselines too), Ollama's llama-server idled at ~30%, and Spotlight indexed intermittently. Load average during the reported runs was 4-10. Runs taken while a peer session drove load average to 60-130 are listed in discarded_runs and are excluded."
+    },
+    {
+      "role": "cuda",
+      "hostname": "archdtop",
+      "cpu": "AMD Ryzen 9 3900X 12-Core",
+      "gpu": "NVIDIA GeForce RTX 5060 Ti 16GB",
+      "driver": "610.43.03",
+      "cuda_toolkit": "13.3 (local extract under ~/.cache/qwen3-tts-native/cuda-root)",
+      "os": "Arch Linux x86_64, kernel 7.1.3-arch1-3",
+      "power": "desktop, AC",
+      "measured_at": "2026-08-30T00:34Z-00:49Z",
+      "concurrent_load": "Idle desktop session. An Ollama co-tenant held ~1.8 GiB of VRAM throughout both arms; nothing else contended for the GPU. Load average <1 outside the runs.",
+      "note": "Built and run in a throwaway tree (~/scratch/qwen-verify-2026-08-30) with its own copy of the 0.6b GGUF and presets. Nothing under ~/campaigns or ~/.cache was modified."
     }
   ],
 
@@ -86,6 +99,37 @@
     "delta_cpu_explicit": "+0.2%, inside run-to-run noise. Explicit CPU is unchanged, as expected: that path never had two answers."
   },
 
+  "results_cuda": {
+    "measured": "2026-08-30 on archdtop, filling what an earlier revision of this file listed under not_measured.cuda. Engine before = ec40d0b (the merge that ENGINE_PIN's ed7312b was reachable from), after = 780a0a4 (the merge of qwen3-tts.cpp#3). Same 0.6b GGUF, same warm-bench harness, 5 fixtures x 3 iterations per arm, preset Vivian, one discarded warmup.",
+    "auto_before": {"rtf_median": 1.788, "rtf_max": 1.883, "ttfa_ms_median": 7955},
+    "auto_after": {"rtf_median": 0.476, "rtf_max": 0.487, "ttfa_ms_median": 2119},
+    "cuda_explicit_before": {"rtf_median": 0.475, "rtf_max": 0.491, "ttfa_ms_median": 2115},
+    "cuda_explicit_after": {"rtf_median": 0.475, "rtf_max": 0.488, "ttfa_ms_median": 2136},
+    "cpu_explicit_after": {"rtf_median": 5.037, "rtf_max": 5.129, "note": "This box's CPU, for scale. The Ryzen 3900X is 10.6x slower than its GPU at 0.6b; the M4 Max CPU result does not generalise here."},
+    "delta_auto": "-73% (1.788 -> 0.476). AUTO now lands on explicit cuda's number instead of 3.76x above it.",
+    "delta_cuda_explicit": "0.475 -> 0.475, unchanged. Explicit cuda never had two answers, exactly as on Metal.",
+    "reading": "This is qwen3-tts-native#5 measured end to end on the reported hardware and then closed. Metal pays ~4% for one placement policy; CUDA gets 3.76x back. The trade the fix makes is worth it on the platform the throughput gate actually runs on.",
+    "placement_after": {
+      "auto": {
+        "TTSTransformer": {"weight_buffer": "CUDA0", "compute_backend": "CUDA0", "agree": true},
+        "AudioTokenizerDecoder": {"weight_buffer": "CUDA0", "compute_backend": "CUDA0", "agree": true}
+      },
+      "cuda_explicit": {
+        "TTSTransformer": {"weight_buffer": "CUDA0", "compute_backend": "CUDA0", "agree": true},
+        "AudioTokenizerDecoder": {"weight_buffer": "CUDA0", "compute_backend": "CUDA0", "agree": true}
+      },
+      "before_banner_note": "The pre-fix build has no 'Weight buffer:' line to read - the diagnostic ships with the fix - and its 'backend:' lines print CUDA0 for both components, because the compute path was always correct. On CUDA the before-state is therefore visible in the RTF, not the banner. The Metal arm above is where the split was read directly, from a baseline rebuilt with only the two fprintf calls added."
+    }
+  },
+
+  "g3_codebook_check": {
+    "question": "normalize_codebooks() dereferenced device pointers on the host before this PR, and CUDA audio content had never been checked. Was every previous CUDA rendering on this host wrong?",
+    "method": "Same box, same 0.6b GGUF, same greedy flags (--temperature 0 --top-k 0 --top-p 1 --repetition-penalty 1.05 --max-tokens 256 -l en -j 4), same text, QWEN3_TTS_BACKEND=cuda on both engine builds. Same backend on both sides, so the sampling trajectory matches and the hashes are comparable.",
+    "result": "IDENTICAL. sha256 74ef7e110c0d7f7a20d622ef167ae7051702d73af430cfad77d7b2fcb1c5eadc on both builds; 0 of 206805 samples differ.",
+    "conclusion": "No pre-existing corruption on this host - the host dereference happened to read and write the right bytes through CUDA's unified addressing. Nothing to file. The fix is still correct on its own terms: it removes an invariant that was never stated and is not guaranteed by the API, and the result is unchanged where it happened to hold.",
+    "scope": "One host, one driver (610.43.03), one GGUF. It says nothing about other CUDA hosts, and it is not a reason to keep host dereferences."
+  },
+
   "decode_split_metal": {
     "method": "qwen3-tts-cli single-shot on the F4 fixture text, 3 runs each, quiet machine. Timing block excludes model load. Normalised to milliseconds of vocoder decode per second of produced audio, because sampling makes audio duration vary run to run.",
     "before_ms_decode_per_audio_s": [326, 329, 328],
@@ -116,7 +160,7 @@
   },
 
   "not_measured": {
-    "cuda": "archdtop (RTX 5060 Ti) was unreachable during this window: Tailscale SSH is in check mode and requires a browser approval from Lance, and the LAN sshd at 192.168.0.18 rejects every key on this Mac. The CUDA before/after is the open gate on qwen3-tts.cpp#3; the expected result is that the AUTO worker logs 'Weight buffer: CUDA0' for AudioTokenizerDecoder where it previously logged CPU, and that AUTO rtf converges from 1.68-1.71 onto the explicit-cuda 0.459-0.475.",
+    "cuda": "MEASURED 2026-08-30, see results_cuda and g3_codebook_check. archdtop was unreachable when this file was first written; it was reached the next day and both predictions held - the decoder logs 'Weight buffer: CUDA0' under AUTO, and AUTO rtf converged from 1.788 onto explicit cuda's 0.475.",
     "tier_1_7b": "Only 0.6b was measured. The placement change is tier-independent by construction, but the RTF cost was not re-measured at 1.7b.",
     "speaker_encoder": "AudioTokenizerEncoder is loaded lazily and unused when synthesising from a baked preset, so its weight buffer moved from CPU to MTL0 without being exercised here.",
     "ttfa": "Stage A worker, streaming=false. Every wall figure is whole-utterance wall."

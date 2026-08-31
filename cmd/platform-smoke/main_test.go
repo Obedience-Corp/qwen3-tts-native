@@ -27,6 +27,29 @@ func TestParseBackendEvidenceCUDA(t *testing.T) {
 	}
 }
 
+func TestParseVulkanEvidenceRADV(t *testing.T) {
+	log := `
+ggml_vulkan: 0 = AMD Radeon 890M Graphics (RADV STRIX1)
+  TTSTransformer backend: Vulkan0
+  AudioTokenizerDecoder backend: Vulkan0
+`
+	_, confirmed := parseVulkanEvidence(log)
+	if !confirmed {
+		t.Fatal("expected Vulkan/RADV evidence to be confirmed")
+	}
+}
+
+func TestParseVulkanEvidenceRejectsCPU(t *testing.T) {
+	log := `
+  [backend] Vulkan requested but no Vulkan device registered
+  TTSTransformer backend: CPU
+`
+	_, confirmed := parseVulkanEvidence(log)
+	if confirmed {
+		t.Fatal("CPU fallback must not satisfy Vulkan validation")
+	}
+}
+
 func TestParseBackendEvidenceRejectsFallback(t *testing.T) {
 	log := `
   [backend] CUDA requested but unavailable, falling back to CPU

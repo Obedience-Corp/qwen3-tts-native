@@ -11,8 +11,12 @@ models="${QWEN3_TTS_MODELS:-${QWEN_MODELS:-$root/models}}"
 backend="${QWEN3_TTS_BACKEND:-auto}"
 require_run="${REQUIRE_PLATFORM_SMOKE:-0}"
 require_cuda="${REQUIRE_CUDA:-0}"
+require_vulkan="${REQUIRE_VULKAN:-0}"
 if [[ "$require_cuda" == "1" || "$require_cuda" == "true" ]]; then
   backend="cuda"
+fi
+if [[ "$require_vulkan" == "1" || "$require_vulkan" == "true" ]]; then
+  backend="vulkan"
 fi
 
 os="$(uname -s)"
@@ -39,6 +43,7 @@ args=(
 [[ -n "${PLATFORM_PRESET:-}" ]] && args+=(--preset "$PLATFORM_PRESET")
 [[ "$require_run" == "1" || "$require_run" == "true" ]] && args+=(--require)
 [[ "$require_cuda" == "1" || "$require_cuda" == "true" ]] && args+=(--require-cuda)
+[[ "$require_vulkan" == "1" || "$require_vulkan" == "true" ]] && args+=(--require-vulkan)
 
 export DYLD_LIBRARY_PATH="$root/build${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 export LD_LIBRARY_PATH="$root/build${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"

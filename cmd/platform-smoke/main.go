@@ -33,9 +33,10 @@ type options struct {
 	result      string
 	stderrLog   string
 	backend     string
-	requireRun  bool
-	requireCUDA bool
-	timeout     time.Duration
+	requireRun    bool
+	requireCUDA   bool
+	requireVulkan bool
+	timeout       time.Duration
 }
 
 type hostReport struct {
@@ -59,9 +60,11 @@ type buildReport struct {
 
 type backendReport struct {
 	Requested     string   `json:"requested"`
-	RequireCUDA   bool     `json:"require_cuda"`
-	CUDAConfirmed bool     `json:"cuda_confirmed"`
-	Evidence      []string `json:"evidence,omitempty"`
+	RequireCUDA     bool     `json:"require_cuda"`
+	CUDAConfirmed   bool     `json:"cuda_confirmed"`
+	RequireVulkan   bool     `json:"require_vulkan"`
+	VulkanConfirmed bool     `json:"vulkan_confirmed"`
+	Evidence        []string `json:"evidence,omitempty"`
 }
 
 type protocolReport struct {
@@ -139,6 +142,7 @@ func main() {
 	flag.StringVar(&opts.backend, "backend", "auto", "requested backend")
 	flag.BoolVar(&opts.requireRun, "require", false, "fail instead of skip when prerequisites are missing")
 	flag.BoolVar(&opts.requireCUDA, "require-cuda", false, "require NVIDIA CUDA and reject CPU fallback")
+	flag.BoolVar(&opts.requireVulkan, "require-vulkan", false, "require Vulkan (RADV/ANV) and reject CPU fallback")
 	flag.DurationVar(&opts.timeout, "timeout", 20*time.Minute, "worker timeout")
 	flag.Parse()
 
@@ -168,6 +172,7 @@ func main() {
 	report.Protocol = protocol
 	report.Protocol.ElapsedMS = time.Since(start).Milliseconds()
 	report.Backend.Evidence, report.Backend.CUDAConfirmed = parseBackendEvidence(stderrText)
+	_, report.Backend.VulkanConfirmed = parseVulkanEvidence(stderrText)
 	if opts.stderrLog != "" {
 		if err := writeText(opts.stderrLog, stderrText); err != nil && runErr == nil {
 			runErr = err
@@ -176,6 +181,9 @@ func main() {
 	}
 	if runErr == nil && opts.requireCUDA && !report.Backend.CUDAConfirmed {
 		runErr = errors.New("CUDA required but worker logs did not prove a CUDA backend")
+	}
+	if runErr == nil && opts.requireVulkan && !report.Backend.VulkanConfirmed {
+		runErr = errors.New("Vulkan required but worker logs did not prove a Vulkan backend")
 	}
 
 	if runErr != nil {
@@ -224,6 +232,9 @@ func normalizeOptions(opts *options) error {
 	if opts.requireCUDA {
 		opts.backend = "cuda"
 	}
+	if opts.requireVulkan {
+		opts.backend = "vulkan"
+	}
 	if opts.backend == "" {
 		opts.backend = "auto"
 	}
@@ -248,7 +259,7 @@ func newReport(opts options) platformReport {
 			Models:     relativePath(opts.repoRoot, opts.models),
 			Preset:     preset,
 		},
-		Backend: backendReport{Requested: opts.backend, RequireCUDA: opts.requireCUDA},
+		Backend: backendReport{Requested: opts.backend, RequireCUDA: opts.requireCUDA, RequireVulkan: opts.requireVulkan},
 	}
 }
 
@@ -485,6 +496,26 @@ func parseBackendEvidence(stderrText string) ([]string, bool) {
 		}
 	}
 	if strings.Contains(strings.ToLower(stderrText), "cuda requested but unavailable") {
+		confirmed = false
+	}
+	return evidence, confirmed
+}
+
+func parseVulkanEvidence(stderrText string) ([]string, bool) {
+	matches := backendLineRE.FindAllStringSubmatch(stderrText, -1)
+	evidence := make([]string, 0, len(matches))
+	confirmed := len(matches) > 0
+	for _, match := range matches {
+		line := match[1] + " backend: " + strings.TrimSpace(match[2])
+		evidence = append(evidence, line)
+		name := strings.ToLower(match[2])
+		if strings.Contains(name, "cpu") || !(strings.Contains(name, "vulkan") || strings.Contains(name, "radv")) {
+			confirmed = false
+		}
+	}
+	lower := strings.ToLower(stderrText)
+	if strings.Contains(lower, "vulkan requested but no vulkan device") ||
+		strings.Contains(lower, "unknown qwen3_tts_backend") {
 		confirmed = false
 	}
 	return evidence, confirmed

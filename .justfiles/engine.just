@@ -68,12 +68,19 @@ build:
         # Always stated, never omitted, and never spelled here: cmake caches the
         # option, so leaving it out lets a previously-CUDA tree keep building
         # CUDA. goos_goarch.sh owns the literal so the self-test can insist this
-        # file contains none.
+        # file contains none. Same for Vulkan.
         cmake_args+=("$(qwen_cuda_cmake_flag)")
+        cmake_args+=("$(qwen_vulkan_cmake_flag)")
+        if qwen_cuda_build && qwen_vulkan_env_requested; then
+          echo "Refusing to build: CUDA=1 and VULKAN=1 together. NVIDIA packages are -cuda; AMD/Intel iGPU packages are -vulkan." >&2
+          exit 1
+        fi
         if qwen_cuda_build; then
           echo "Building GGML with CUDA (CUDA=1). Requires driver + toolkit (RTX 50xx: recent CUDA)."
+        elif qwen_vulkan_build; then
+          echo "Building GGML with Vulkan (VULKAN=1). Requires a Vulkan ICD (RADV/ANV), not NVIDIA CUDA."
         else
-          echo "Building GGML CPU-only (CUDA explicitly off). For NVIDIA GPU: CUDA=1 just engine build"
+          echo "Building GGML CPU-only (CUDA and Vulkan explicitly off). NVIDIA: CUDA=1. AMD/Intel iGPU: VULKAN=1."
         fi
         ;;
       MINGW*|MSYS*|CYGWIN*|Windows_NT)

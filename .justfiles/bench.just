@@ -143,6 +143,15 @@ platform-cuda:
     REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 QWEN3_TTS_BACKEND=cuda \
       "$root/scripts/smoke_platform.sh"
 
+# Linux Vulkan validation (RADV/ANV). Fails if the worker log is CPU.
+platform-vulkan:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    chmod +x "$root/scripts/smoke_platform.sh"
+    REQUIRE_PLATFORM_SMOKE=1 REQUIRE_VULKAN=1 QWEN3_TTS_BACKEND=vulkan \
+      "$root/scripts/smoke_platform.sh"
+
 # Run all green gates for this sequence (smoke + harness + latency/cancel + parity).
 all:
     #!/usr/bin/env bash

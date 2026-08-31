@@ -98,11 +98,96 @@ qwen_cuda_artifact_state() (
   if ((${#libs[@]})); then echo on; else echo off; fi
 )
 
+# True when this build compiles the Vulkan backend (-DGGML_VULKAN=ON).
+# Linux AMD/Intel iGPU path (RADV/ANV). Darwin is Metal; CUDA wins if both
+# env vars are set so an NVIDIA box never gets a -vulkan tarball by accident.
+qwen_vulkan_build() {
+  [[ "$(qwen_goos)" == "darwin" ]] && return 1
+  qwen_cuda_build && return 1
+  case "${QWEN_VULKAN_AUTHORITY:-}" in
+    on)  return 0 ;;
+    off) return 1 ;;
+  esac
+  qwen_vulkan_env_requested
+}
+
+qwen_vulkan_env_requested() {
+  local v
+  for v in "${VULKAN:-}" "${GGML_VULKAN:-}"; do
+    case "$v" in
+      1|true|TRUE|on|ON|yes|YES) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+qwen_vulkan_env_set() {
+  [[ -n "${VULKAN:-}" || -n "${GGML_VULKAN:-}" ]]
+}
+
+qwen_vulkan_cache_state() {
+  local cache="$1/CMakeCache.txt" v
+  [[ -f "$cache" ]] || { echo unknown; return 0; }
+  v="$(sed -n 's/^GGML_VULKAN:BOOL=//p' "$cache" | head -1)"
+  case "$v" in
+    ON|1|TRUE|YES|On|true|yes) echo on ;;
+    '')                        echo unknown ;;
+    *)                         echo off ;;
+  esac
+}
+
+qwen_vulkan_artifact_state() (
+  shopt -s nullglob
+  local libs=( "$1"/ggml-vulkan/libggml-vulkan.* "$1"/libggml-vulkan.* )
+  if ((${#libs[@]})); then echo on; else echo off; fi
+)
+
+qwen_resolve_vulkan_build() {
+  local ggml_build="$1" ggml_src="$2"
+  local cache artifact env_state authority
+
+  cache="$(qwen_vulkan_cache_state "$ggml_build")"
+  artifact="$(qwen_vulkan_artifact_state "$ggml_src")"
+  if qwen_vulkan_env_requested; then env_state=on; else env_state=off; fi
+
+  if [[ "$cache" != unknown ]]; then
+    authority="$cache"
+  elif [[ "$artifact" == on ]]; then
+    authority=on
+    echo "  [package] no CMakeCache.txt under $ggml_build; falling back to the built artifacts (libggml-vulkan present)" >&2
+  else
+    authority="$env_state"
+  fi
+
+  if [[ "$(qwen_goos)" == darwin ]]; then
+    if [[ "$cache" == on || "$artifact" == on ]]; then
+      echo "Refusing to package: GGML_VULKAN is ON on darwin. Apple builds are Metal." >&2
+      return 1
+    fi
+    echo off
+    return 0
+  fi
+
+  if [[ "$cache" != unknown ]] && qwen_vulkan_env_set && [[ "$env_state" != "$cache" ]]; then
+    echo "Refusing to package: the engine was built with GGML_VULKAN=$cache but the environment asks for $env_state." >&2
+    return 1
+  fi
+
+  if [[ "$authority" == on && "$artifact" == off ]]; then
+    echo "Refusing to package: GGML_VULKAN is ON in $ggml_build/CMakeCache.txt but no libggml-vulkan library was built." >&2
+    return 1
+  fi
+
+  echo "$authority"
+}
+
 # Extra suffix on CUDA builds so CPU and NVIDIA tarballs cannot collide.
 # Empty on CPU/Metal. Hosts pin linux-amd64 vs linux-amd64-cuda separately.
 qwen_package_suffix() {
   if qwen_cuda_build; then
     echo "-cuda"
+  elif qwen_vulkan_build; then
+    echo "-vulkan"
   fi
 }
 
@@ -120,6 +205,14 @@ qwen_cuda_cmake_flag() {
     echo "-DGGML_CUDA=ON"
   else
     echo "-DGGML_CUDA=OFF"
+  fi
+}
+
+qwen_vulkan_cmake_flag() {
+  if qwen_vulkan_build; then
+    echo "-DGGML_VULKAN=ON"
+  else
+    echo "-DGGML_VULKAN=OFF"
   fi
 }
 
@@ -218,6 +311,8 @@ qwen_resolve_build_authority() {
 qwen_backend_hint() {
   if qwen_cuda_build; then
     echo cuda
+  elif qwen_vulkan_build; then
+    echo vulkan
   elif [[ "$(qwen_goos)" == "darwin" ]]; then
     # Metal is a cache fact too, not an assumption about the OS. Without a
     # resolved authority (no cache read yet) darwin still means metal, because

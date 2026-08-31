@@ -33,16 +33,17 @@ fi
 # Three legs, not two: the cmake option is what actually gets compiled, and it is
 # the one the other two are a claim about.
 check_agree() {
-  local label="$1" want_cuda="$2" suffix hint flag
+  local label="$1" want_cuda="$2" suffix hint flag vflag
   suffix="$(qwen_package_suffix)"
   hint="$(qwen_backend_hint)"
   flag="$(qwen_cuda_cmake_flag)"
+  vflag="$(qwen_vulkan_cmake_flag)"
   if [[ "$want_cuda" == yes ]]; then
     [[ "$suffix" == -cuda ]] || fail "$label: suffix want -cuda, got '$suffix'"
     [[ "$hint" == cuda ]] || fail "$label: backend_hint want cuda, got '$hint'"
     [[ "$flag" == -DGGML_CUDA=ON ]] || fail "$label: cmake flag want -DGGML_CUDA=ON, got '$flag'"
+    [[ "$vflag" == -DGGML_VULKAN=OFF ]] || fail "$label: CUDA build must pass -DGGML_VULKAN=OFF, got '$vflag'"
   else
-    [[ -z "$suffix" ]] || fail "$label: suffix want empty, got '$suffix'"
     [[ "$hint" != cuda ]] || fail "$label: backend_hint must not be cuda, got '$hint'"
     [[ "$flag" == -DGGML_CUDA=OFF ]] || fail "$label: cmake flag want -DGGML_CUDA=OFF, got '$flag'"
   fi
@@ -50,11 +51,18 @@ check_agree() {
   # is never omitted, so a stale cmake cache cannot make the build disagree with
   # the label.
   [[ -n "$flag" ]] || fail "$label: cmake flag must always be stated, got empty"
+  [[ -n "$vflag" ]] || fail "$label: vulkan cmake flag must always be stated, got empty"
   if [[ "$suffix" == -cuda ]] && [[ "$hint" != cuda ]]; then
     fail "$label: -cuda archive with backend_hint=$hint"
   fi
   if [[ "$hint" == cuda ]] && [[ "$suffix" != -cuda ]]; then
     fail "$label: backend_hint=cuda with suffix '$suffix'"
+  fi
+  if [[ "$suffix" == -vulkan ]] && [[ "$hint" != vulkan ]]; then
+    fail "$label: -vulkan archive with backend_hint=$hint"
+  fi
+  if [[ "$hint" == vulkan ]] && [[ "$suffix" != -vulkan ]]; then
+    fail "$label: backend_hint=vulkan with suffix '$suffix'"
   fi
   if [[ "$flag" == -DGGML_CUDA=ON ]] && { [[ "$hint" != cuda ]] || [[ "$suffix" != -cuda ]]; }; then
     fail "$label: builds CUDA but labels it $hint/'$suffix'"
@@ -72,22 +80,32 @@ for os in linux darwin; do
   # On Darwin, CUDA=1 is a mistake, not a request: Metal wins every shape.
   if [[ "$os" == darwin ]]; then want=no; else want=yes; fi
 
-  ( as_goos "$os"; unset CUDA GGML_CUDA;              check_agree "$os: neither set"   no )
-  ( as_goos "$os"; unset GGML_CUDA; export CUDA=1;    check_agree "$os: CUDA=1"        "$want" )
-  ( as_goos "$os"; unset CUDA; export GGML_CUDA=1;    check_agree "$os: GGML_CUDA=1"   "$want" )
-  ( as_goos "$os"; unset GGML_CUDA; export CUDA=true; check_agree "$os: CUDA=true"     "$want" )
-  ( as_goos "$os"; unset CUDA; export GGML_CUDA=ON;   check_agree "$os: GGML_CUDA=ON"  "$want" )
-  ( as_goos "$os"; unset GGML_CUDA; export CUDA=0;    check_agree "$os: CUDA=0"        no )
+  ( as_goos "$os"; unset CUDA GGML_CUDA VULKAN GGML_VULKAN;              check_agree "$os: neither set"   no )
+  ( as_goos "$os"; unset GGML_CUDA VULKAN GGML_VULKAN; export CUDA=1;    check_agree "$os: CUDA=1"        "$want" )
+  ( as_goos "$os"; unset CUDA VULKAN GGML_VULKAN; export GGML_CUDA=1;    check_agree "$os: GGML_CUDA=1"   "$want" )
+  ( as_goos "$os"; unset GGML_CUDA VULKAN GGML_VULKAN; export CUDA=true; check_agree "$os: CUDA=true"     "$want" )
+  ( as_goos "$os"; unset CUDA VULKAN GGML_VULKAN; export GGML_CUDA=ON;   check_agree "$os: GGML_CUDA=ON"  "$want" )
+  ( as_goos "$os"; unset GGML_CUDA VULKAN GGML_VULKAN; export CUDA=0;    check_agree "$os: CUDA=0"        no )
 
   # The runtime override must not reach the packaged hint.
-  ( as_goos "$os"; unset CUDA GGML_CUDA; export QWEN3_TTS_BACKEND=cuda
+  ( as_goos "$os"; unset CUDA GGML_CUDA VULKAN GGML_VULKAN; export QWEN3_TTS_BACKEND=cuda
     check_agree "$os: QWEN3_TTS_BACKEND=cuda on a CPU build" no )
+  ( as_goos "$os"; unset CUDA GGML_CUDA VULKAN GGML_VULKAN; export QWEN3_TTS_BACKEND=vulkan
+    check_agree "$os: QWEN3_TTS_BACKEND=vulkan on a CPU build" no )
 done
 
 # The hints themselves, not just their agreement with the suffix.
 [[ "$( as_goos darwin; unset CUDA GGML_CUDA; qwen_backend_hint )" == metal ]] || fail "darwin hint want metal"
-[[ "$( as_goos linux;  unset CUDA GGML_CUDA; qwen_backend_hint )" == cpu   ]] || fail "linux CPU hint want cpu"
+[[ "$( as_goos linux;  unset CUDA GGML_CUDA VULKAN GGML_VULKAN; qwen_backend_hint )" == cpu   ]] || fail "linux CPU hint want cpu"
 [[ "$( as_goos linux;  CUDA=1 qwen_backend_hint )" == cuda ]] || fail "linux CUDA hint want cuda"
+[[ "$( as_goos linux;  unset CUDA GGML_CUDA; VULKAN=1 qwen_backend_hint )" == vulkan ]] || fail "linux VULKAN=1 hint want vulkan"
+[[ "$( as_goos linux;  unset CUDA GGML_CUDA; VULKAN=1 qwen_package_suffix )" == -vulkan ]] || fail "linux VULKAN=1 suffix want -vulkan"
+[[ "$( as_goos linux;  CUDA=1 VULKAN=1 qwen_backend_hint )" == cuda ]] || fail "CUDA=1 must win over VULKAN=1"
+[[ "$( as_goos darwin; VULKAN=1 qwen_backend_hint )" == metal ]] || fail "darwin VULKAN=1 must stay metal"
+[[ "$( as_goos linux;  unset CUDA GGML_CUDA; VULKAN=1 qwen_vulkan_cmake_flag )" == -DGGML_VULKAN=ON ]] \
+  || fail "linux VULKAN=1 must pass -DGGML_VULKAN=ON"
+[[ "$( as_goos linux;  unset CUDA GGML_CUDA VULKAN GGML_VULKAN; qwen_vulkan_cmake_flag )" == -DGGML_VULKAN=OFF ]] \
+  || fail "linux CPU must pass -DGGML_VULKAN=OFF explicitly"
 
 # The CPU case must state OFF, not say nothing. A silent default is what lets a
 # cached cmake tree keep building CUDA under a cpu label.
@@ -101,6 +119,11 @@ done
 # scripts/engine_cuda_flag_test.sh runs the real recipe against a stub cmake,
 # asserts the argv cmake receives and the CMakeCache.txt that results, and this
 # file sticks to the pure functions.
+recipe="$root/.justfiles/engine.just"
+grep -q 'qwen_vulkan_cmake_flag' "$recipe" || fail "engine.just no longer sources the vulkan cmake flag from goos_goarch.sh"
+if grep -F -- '-DGGML_VULKAN=' "$recipe" >/dev/null; then
+  fail "engine.just spells -DGGML_VULKAN= itself; the literal belongs to qwen_vulkan_cmake_flag"
+fi
 
 # ---------------------------------------------------------------------------
 # Build authority: the packager must describe the binary, not the shell.

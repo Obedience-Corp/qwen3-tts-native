@@ -20,16 +20,22 @@ source "$root/scripts/goos_goarch.sh"
 os="$(qwen_goos)"
 arch="$(qwen_goarch)"
 
-# The built tree, not the shell, decides whether this is a CUDA package.
+# The built tree, not the shell, decides whether this is a CUDA/Vulkan package.
 # CMakeCache.txt is ground truth; the environment only states an intent, and the
 # two drift in both directions (see qwen_resolve_build_authority). Everything below —
-# the -cuda suffix, install.json's backend_hint, and which ggml backends get
+# the suffix, install.json's backend_hint, and which ggml backends get
 # copied — reads from this one answer.
 ggml_src="$engine/ggml/build/src"
 build_authority="$(qwen_resolve_build_authority "$engine/ggml/build" "$ggml_src")" || exit 1
 QWEN_CUDA_AUTHORITY="${build_authority%% *}"
 QWEN_METAL_AUTHORITY="${build_authority##* }"
 export QWEN_CUDA_AUTHORITY QWEN_METAL_AUTHORITY
+QWEN_VULKAN_AUTHORITY="$(qwen_resolve_vulkan_build "$engine/ggml/build" "$ggml_src")" || exit 1
+export QWEN_VULKAN_AUTHORITY
+if [[ "$QWEN_CUDA_AUTHORITY" == on && "$QWEN_VULKAN_AUTHORITY" == on ]]; then
+  echo "Refusing to package: tree has both CUDA and Vulkan backends. One tarball, one accelerator." >&2
+  exit 1
+fi
 
 pkg_suffix="$(qwen_package_suffix)"
 
@@ -144,11 +150,17 @@ if [[ -d "$ggml_src" ]]; then
     if qwen_cuda_build; then
       ggml_copy_dirs+=( "$ggml_src"/ggml-cuda )
     fi
+    if qwen_vulkan_build; then
+      ggml_copy_dirs+=( "$ggml_src"/ggml-vulkan )
+    fi
     for d in "${ggml_copy_dirs[@]}"; do
       for f in "$d"/libggml*.so*; do
         [[ -e "$f" ]] || continue
         # Belt and braces: never let a cuda lib in through a non-cuda directory.
         if ! qwen_cuda_build && [[ "$(basename "$f")" == libggml-cuda* ]]; then
+          continue
+        fi
+        if ! qwen_vulkan_build && [[ "$(basename "$f")" == libggml-vulkan* ]]; then
           continue
         fi
         cp -a "$f" "$dist/bin/" 2>/dev/null || true
@@ -210,6 +222,7 @@ else
   # Both directions of the same lie, asserted on the finished bin/ rather than on
   # the intent that produced it.
   ggml_cuda_so=( "$dist/bin"/libggml-cuda.so* )
+  ggml_vulkan_so=( "$dist/bin"/libggml-vulkan.so* )
   if [[ "$pkg_suffix" == "-cuda" ]]; then
     if ((${#ggml_cuda_so[@]} == 0)); then
       echo "Package incomplete: ${name} is labeled -cuda (backend_hint=$(qwen_backend_hint)) but bin/ has no libggml-cuda.so*" >&2
@@ -218,6 +231,15 @@ else
   elif ((${#ggml_cuda_so[@]})); then
     echo "Package incomplete: ${name} is labeled $(qwen_backend_hint) but bin/ carries ${ggml_cuda_so[*]##*/}" >&2
     echo "  A cpu-labeled tarball with a CUDA backend inside is what disabled streaming on CUDA hosts." >&2
+    exit 1
+  fi
+  if [[ "$pkg_suffix" == "-vulkan" ]]; then
+    if ((${#ggml_vulkan_so[@]} == 0)); then
+      echo "Package incomplete: ${name} is labeled -vulkan (backend_hint=$(qwen_backend_hint)) but bin/ has no libggml-vulkan.so*" >&2
+      exit 1
+    fi
+  elif ((${#ggml_vulkan_so[@]})); then
+    echo "Package incomplete: ${name} is labeled $(qwen_backend_hint) but bin/ carries ${ggml_vulkan_so[*]##*/}" >&2
     exit 1
   fi
 fi

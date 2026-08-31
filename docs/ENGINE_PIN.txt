@@ -1,25 +1,12 @@
 # Default pin was predict-woo/qwen3-tts.cpp @ b3ba140 (0.6B only).
 # 1.7B architecture lives on Obedience-Corp/qwen3-tts.cpp feat/1.7b-architecture:
 ENGINE_REPO=https://github.com/Obedience-Corp/qwen3-tts.cpp.git
-ENGINE_SHA=780a0a44ba141a32f9fef04b164515aa1e3f2d1b
-Built: 2026-08-29 Linux CUDA (archdtop, RTX 5060 Ti) + 2026-08-27 Metal arm64
+ENGINE_SHA=0cf425096dbb993c13b96283728e0a3ef4214c7d
+Built: 2026-08-31 Metal + CUDA + Vulkan (RADV STRIX1 / Pocket 4)
 Note: 1.7B talker/code_pred split + small_to_mtp; 0.6B still default ship
-Note: 780a0a4 is the merge of Obedience-Corp/qwen3-tts.cpp#3 — one backend
-      placement policy for weights and compute (AUTO no longer strands the
-      vocoder's weights on CPU against a CUDA0/MTL0 compute backend), plus
-      normalize_codebooks() staging through ggml_backend_tensor_get/set
-      instead of dereferencing a device pointer on the host.
-Note: CUDA-verified on archdtop 2026-08-29 against PR #3's per-box checklist:
-      G1 placement (decoder now CUDA0/CUDA0 under AUTO), G2 AUTO == explicit
-      cuda byte-identical, G4 audio content vs this box's own CPU reference,
-      G5 warm RTF. G3 (pre-fix ec40d0b vs this pin, both =cuda) came out
-      byte-identical, so there was no pre-existing codebook corruption on this
-      host and no separate issue to file. Measured before/after at 0.6b:
-      AUTO 1.788 -> 0.476, explicit cuda 0.475 -> 0.475. qwen3-tts-native#5's
-      AUTO penalty (3.76x here) is gone; the export is now only an override.
-Note: ed7312b (WI-3dbb44 slice 5a: opt-in PCM streaming) is an ancestor of this
-      pin via merge commit ec40d0b. Revert to
-      22277bc6f087fd081df8bffa9c280b106a8af567 for a stage-A-only build. The
-      worker builds against any of these pins — streaming is compiled in only
-      when the header defines QWEN3_TTS_HAS_PCM_STREAMING.
+Note: 0cf4250 merges feat/ggml-vulkan (#5): link libggml-vulkan, QWEN3_TTS_BACKEND=vulkan
+      fails closed on the Vulkan registry. It is a descendant of 780a0a4 (#3:
+      one backend placement policy + codebook get/set).
+Note: CUDA-verified on archdtop 2026-08-29 against PR #3 (AUTO vocoder now CUDA0/CUDA0).
+Note: Streaming is compiled in when the header defines QWEN3_TTS_HAS_PCM_STREAMING.
 CLI: third_party/qwen3-tts.cpp/build/qwen3-tts-cli (local only, not committed)

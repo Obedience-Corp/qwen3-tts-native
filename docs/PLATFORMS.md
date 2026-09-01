@@ -13,7 +13,7 @@ host smoke with real GGUF assets, emitted valid 24 kHz mono `f32le` PCM, and
 |----------|--------|---------------|-----------------|---------|--------|
 | **macOS arm64** | Yes | Yes | Yes (`darwin-arm64`) | Metal | **Validated** (latency + platform smoke) |
 | **Linux amd64 CPU** | Yes | Yes | Yes (`linux-amd64`) | CPU | **Shipped** in [v0.1.1](https://github.com/Obedience-Corp/qwen3-tts-native/releases/tag/v0.1.1); the default linux/amd64 pin |
-| **Linux amd64 CUDA** | Yes | Yes (`CUDA=1`) | Yes (`linux-amd64-cuda`) | NVIDIA CUDA | **Validated** — EndeavourOS/Arch + **RTX 5060 Ti 16GB** |
+| **Linux amd64 CUDA** | Yes | Yes (`CUDA=1`) | Yes (`linux-amd64-cuda`) | NVIDIA CUDA | **Validated** — EndeavourOS/Arch + **RTX 5060 Ti 16GB** (`archdtop`); public asset publish from that host (see [RELEASE.md](RELEASE.md), suggested tag v0.1.3) |
 | **Linux amd64 Vulkan** | Yes | Yes (`VULKAN=1`) | Yes (`linux-amd64-vulkan`) | RADV/ANV (AMD/Intel iGPU) | **Validated** — GPD Pocket 4 / Radeon 890M (RADV STRIX1), RTF ~1.6–2 |
 | **Linux aarch64** | Yes | Same | Same | CPU or CUDA | Best-effort (untested) |
 | **Windows x64** | Yes | Not in `just` yet | No | CPU / CUDA later | Planned |
@@ -86,15 +86,21 @@ than realtime, which Metal does not. Its own bench is queued; nothing should be
 re-pointed at it before then. The support matrix above still lists Metal as the
 validated macOS backend for that reason.
 
-### Linux CUDA (Arch + RTX 5060 Ti)
+### Linux CUDA (Arch + RTX 5060 Ti / `archdtop`)
+
+Publish the public `linux-amd64-cuda` asset from this host only — see
+[RELEASE.md](RELEASE.md). Same engine pin as Vulkan (`docs/ENGINE_PIN.txt`).
 
 ```bash
-just engine pin                  # docs/ENGINE_PIN.txt (currently 780a0a4)
+CUDA=1 just engine pin           # docs/ENGINE_PIN.txt
 CUDA=1 just engine build         # or GGML_CUDA=1 — same flag, one source of truth
 just engine worker
 just harness test
 REQUIRE_PLATFORM_SMOKE=1 REQUIRE_CUDA=1 just bench platform-cuda
+just release package             # → …-linux-amd64-cuda.tar.gz (cache is authority)
 ```
+
+Do not combine with `VULKAN=1`: one tarball, one accelerator.
 
 `CUDA=1` (or `GGML_CUDA=1`) decides three things at once — `-DGGML_CUDA=ON`,
 the `-cuda` tarball suffix, and `install.json`'s `backend_hint` — from the one
@@ -164,7 +170,7 @@ Not wired in `just` yet. Upstream CMake has WIN32 stubs only.
 Lab artifact:
 
 ```text
-qwen3-tts-native-<gitshort>-<goos>-<goarch>[ -cuda].tar.gz
+qwen3-tts-native-<gitshort>-<goos>-<goarch>[-cuda|-vulkan].tar.gz
 ```
 
 Stable release names (host defaults):
@@ -173,10 +179,12 @@ Stable release names (host defaults):
 qwen3-tts-native-darwin-arm64.tar.gz
 qwen3-tts-native-linux-amd64.tar.gz
 qwen3-tts-native-linux-amd64-cuda.tar.gz
+qwen3-tts-native-linux-amd64-vulkan.tar.gz
 ```
 
 `install.json` records `os`/`arch` as Go's GOOS/GOARCH (`linux`/`amd64`,
 `darwin`/`arm64`) plus `bin.lib` (`.dylib` or `.so`) and `backend_hint`
-(`metal` on darwin, `cuda` on a CUDA build, else `cpu`). The `-cuda` suffix and
-`backend_hint: "cuda"` always travel together — both come from
-`qwen_cuda_build()` in `scripts/goos_goarch.sh`.
+(`metal` on darwin, `cuda` / `vulkan` on those builds, else `cpu`). The
+`-cuda` / `-vulkan` suffix and matching `backend_hint` always travel together —
+both come from `scripts/goos_goarch.sh`. CUDA and Vulkan never share one
+archive.

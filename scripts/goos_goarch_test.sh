@@ -101,6 +101,25 @@ done
 [[ "$( as_goos linux;  unset CUDA GGML_CUDA; VULKAN=1 qwen_backend_hint )" == vulkan ]] || fail "linux VULKAN=1 hint want vulkan"
 [[ "$( as_goos linux;  unset CUDA GGML_CUDA; VULKAN=1 qwen_package_suffix )" == -vulkan ]] || fail "linux VULKAN=1 suffix want -vulkan"
 [[ "$( as_goos linux;  CUDA=1 VULKAN=1 qwen_backend_hint )" == cuda ]] || fail "CUDA=1 must win over VULKAN=1"
+[[ "$( as_goos linux;  CUDA=1 VULKAN=1 qwen_package_suffix )" == -cuda ]] || fail "CUDA=1+VULKAN=1 suffix want -cuda (not -vulkan)"
+[[ "$( as_goos linux;  CUDA=1 VULKAN=1 qwen_cuda_cmake_flag )" == -DGGML_CUDA=ON ]] \
+  || fail "CUDA=1+VULKAN=1 must still pass -DGGML_CUDA=ON"
+[[ "$( as_goos linux;  CUDA=1 VULKAN=1 qwen_vulkan_cmake_flag )" == -DGGML_VULKAN=OFF ]] \
+  || fail "CUDA=1+VULKAN=1 must pass -DGGML_VULKAN=OFF (one accelerator per tarball)"
+# Label agreement when both env vars are set: never a hybrid -cuda/-vulkan claim.
+( as_goos linux; export CUDA=1 VULKAN=1
+  [[ "$(qwen_package_suffix)" == -cuda && "$(qwen_backend_hint)" == cuda ]] \
+    || fail "CUDA=1+VULKAN=1 must agree on -cuda/cuda, got suffix=$(qwen_package_suffix) hint=$(qwen_backend_hint)"
+  [[ "$(qwen_package_suffix)" != -vulkan && "$(qwen_backend_hint)" != vulkan ]] \
+    || fail "CUDA=1+VULKAN=1 must not produce a vulkan label"
+)
+# VULKAN=1 alone: three-way agreement (suffix, hint, both cmake flags).
+( as_goos linux; unset CUDA GGML_CUDA; export VULKAN=1; unset GGML_VULKAN
+  [[ "$(qwen_package_suffix)" == -vulkan ]] || fail "VULKAN=1 suffix want -vulkan"
+  [[ "$(qwen_backend_hint)" == vulkan ]] || fail "VULKAN=1 hint want vulkan"
+  [[ "$(qwen_cuda_cmake_flag)" == -DGGML_CUDA=OFF ]] || fail "VULKAN=1 must pass -DGGML_CUDA=OFF"
+  [[ "$(qwen_vulkan_cmake_flag)" == -DGGML_VULKAN=ON ]] || fail "VULKAN=1 must pass -DGGML_VULKAN=ON"
+)
 [[ "$( as_goos darwin; VULKAN=1 qwen_backend_hint )" == metal ]] || fail "darwin VULKAN=1 must stay metal"
 [[ "$( as_goos linux;  unset CUDA GGML_CUDA; VULKAN=1 qwen_vulkan_cmake_flag )" == -DGGML_VULKAN=ON ]] \
   || fail "linux VULKAN=1 must pass -DGGML_VULKAN=ON"

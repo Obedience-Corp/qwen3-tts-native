@@ -51,7 +51,10 @@ Publish the GitHub release asset named exactly:
 qwen3-tts-native-linux-amd64-cuda.tar.gz
 ```
 
-Suggested tag: **v0.1.3** (do not create the release from a non-NVIDIA machine).
+Published tag: **[v0.1.3](https://github.com/Obedience-Corp/qwen3-tts-native/releases/tag/v0.1.3)**
+(`qwen3-tts-native-linux-amd64-cuda.tar.gz`, SHA-256
+`eea2446480f632b64051ef2eb747cf4d62a6cadd331a0b2e0f5500ca8e711f7e`, 0.6B F16;
+verified on RTX 5060 Ti). Do not create CUDA releases from a non-NVIDIA machine.
 
 `CUDA=1` and `VULKAN=1` cannot share one tarball: `just engine build` refuses
 both together, and the packager refuses a tree that built both backends. NVIDIA

@@ -13,7 +13,7 @@ host smoke with real GGUF assets, emitted valid 24 kHz mono `f32le` PCM, and
 |----------|--------|---------------|-----------------|---------|--------|
 | **macOS arm64** | Yes | Yes | Yes (`darwin-arm64`) | Metal | **Validated** (latency + platform smoke) |
 | **Linux amd64 CPU** | Yes | Yes | Yes (`linux-amd64`) | CPU | **Shipped** in [v0.1.1](https://github.com/Obedience-Corp/qwen3-tts-native/releases/tag/v0.1.1); the default linux/amd64 pin |
-| **Linux amd64 CUDA** | Yes | Yes (`CUDA=1`) | Yes (`linux-amd64-cuda`) | NVIDIA CUDA | **Validated** — EndeavourOS/Arch + **RTX 5060 Ti 16GB** (`archdtop`); public asset publish from that host (see [RELEASE.md](RELEASE.md), suggested tag v0.1.3) |
+| **Linux amd64 CUDA** | Yes | Yes (`CUDA=1`) | Yes (`linux-amd64-cuda`) | NVIDIA CUDA | **Shipped** in [v0.1.3](https://github.com/Obedience-Corp/qwen3-tts-native/releases/tag/v0.1.3) — EndeavourOS/Arch + **RTX 5060 Ti 16GB** (`archdtop`); SHA-256 `eea2446480f632b64051ef2eb747cf4d62a6cadd331a0b2e0f5500ca8e711f7e` |
 | **Linux amd64 Vulkan** | Yes | Yes (`VULKAN=1`) | Yes (`linux-amd64-vulkan`) | RADV/ANV (AMD/Intel iGPU) | **Validated** — GPD Pocket 4 / Radeon 890M (RADV STRIX1), RTF ~1.6–2 |
 | **Linux aarch64** | Yes | Same | Same | CPU or CUDA | Best-effort (untested) |
 | **Windows x64** | Yes | Not in `just` yet | No | CPU / CUDA later | Planned |

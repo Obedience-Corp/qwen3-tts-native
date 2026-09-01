@@ -158,6 +158,41 @@ run_build "linux, CUDA=1 then unset"     Linux  OFF
 run_build "darwin (metal, never CUDA)"   Darwin none
 run_build "darwin, CUDA=1 ignored"       Darwin none env CUDA=1
 
+# VULKAN=1 alone: CUDA off, Vulkan on, package label -vulkan.
+: > "$log"
+rm -rf "$repo/third_party/qwen3-tts.cpp/ggml/build"
+( cd "$repo" && env PATH="$bin:$PATH" CMAKE_LOG="$log" FAKE_OS=Linux VULKAN=1 \
+    just engine build >/dev/null 2>&1 ) \
+  || fail "linux VULKAN=1: just engine build exited non-zero"
+tr ' ' '\n' < "$log" | grep -qx -- '-DGGML_CUDA=OFF' \
+  || fail "linux VULKAN=1 must pass -DGGML_CUDA=OFF"
+tr ' ' '\n' < "$log" | grep -qx -- '-DGGML_VULKAN=ON' \
+  || fail "linux VULKAN=1 must pass -DGGML_VULKAN=ON"
+[[ "$( as_goos_for Linux; unset CUDA GGML_CUDA; QWEN_VULKAN_AUTHORITY=on qwen_package_suffix )" == -vulkan ]] \
+  || fail "linux VULKAN=1 would not label -vulkan"
+[[ "$( as_goos_for Linux; unset CUDA GGML_CUDA; QWEN_VULKAN_AUTHORITY=on qwen_backend_hint )" == vulkan ]] \
+  || fail "linux VULKAN=1 would not hint vulkan"
+echo "  linux, VULKAN=1                                  cmake CUDA=OFF VULKAN=ON  label=vulkan-vulkan"
+
+# CUDA=1 + VULKAN=1: recipe refuses — one tarball, one accelerator.
+: > "$log"
+rm -rf "$repo/third_party/qwen3-tts.cpp/ggml/build"
+if ( cd "$repo" && env PATH="$bin:$PATH" CMAKE_LOG="$log" FAKE_OS=Linux CUDA=1 VULKAN=1 \
+    just engine build >/dev/null 2>&1 ); then
+  fail "linux CUDA=1+VULKAN=1 must be refused by just engine build"
+fi
+echo "  linux, CUDA=1+VULKAN=1                            refused (one accelerator)"
+
+# CUDA=1 must still state Vulkan OFF explicitly (not omit it).
+: > "$log"
+rm -rf "$repo/third_party/qwen3-tts.cpp/ggml/build"
+( cd "$repo" && env PATH="$bin:$PATH" CMAKE_LOG="$log" FAKE_OS=Linux CUDA=1 \
+    just engine build >/dev/null 2>&1 ) \
+  || fail "linux CUDA=1: just engine build exited non-zero"
+tr ' ' '\n' < "$log" | grep -qx -- '-DGGML_VULKAN=OFF' \
+  || fail "linux CUDA=1 must pass -DGGML_VULKAN=OFF explicitly"
+echo "  linux, CUDA=1 states -DGGML_VULKAN=OFF"
+
 # The stale-cache scenario the explicit OFF exists to prevent: configure CUDA on,
 # then build again with nothing set. The second configure must overwrite the
 # cache, not inherit it.

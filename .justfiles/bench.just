@@ -10,7 +10,9 @@ smoke:
     set -euo pipefail
     root="$(git rev-parse --show-toplevel)"
     cli="$root/third_party/qwen3-tts.cpp/build/qwen3-tts-cli"
-    models="$root/models"
+    # shellcheck disable=SC1091
+    source "$root/scripts/models_dir.sh"
+    models="$(qwen3_tts_models_dir)"
     if [[ ! -x "$cli" ]]; then
       echo "Missing CLI — maintainer: just engine pin && just engine build"
       exit 1
@@ -44,7 +46,9 @@ cancel:
     root="$(git rev-parse --show-toplevel)"
     export QWEN_ROOT="$root"
     export QWEN_WORKER="$root/build/qwen3-tts-worker"
-    export QWEN_MODELS="$root/models"
+    # shellcheck disable=SC1091
+    source "$root/scripts/models_dir.sh"
+    export QWEN_MODELS="$(qwen3_tts_models_dir)"
     export DYLD_LIBRARY_PATH="$root/build${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
     export LD_LIBRARY_PATH="$root/build${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     if [[ ! -x "$QWEN_WORKER" ]]; then
@@ -63,7 +67,9 @@ latency:
     mkdir -p "$root/artifacts/latency" "$root/docs/latency"
     export QWEN_ROOT="$root"
     export QWEN_WORKER="$root/build/qwen3-tts-worker"
-    export QWEN_MODELS="$root/models"
+    # shellcheck disable=SC1091
+    source "$root/scripts/models_dir.sh"
+    export QWEN_MODELS="$(qwen3_tts_models_dir)"
     export QWEN_BENCH_JSON="$root/artifacts/latency/worker_warmish.json"
     export DYLD_LIBRARY_PATH="$root/build${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
     export LD_LIBRARY_PATH="$root/build${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -102,7 +108,9 @@ warm tier="0.6b" iters="3" fixtures="":
     root="$(git rev-parse --show-toplevel)"
     export QWEN_ROOT="$root"
     export QWEN_WORKER="${QWEN_WORKER:-$root/build/qwen3-tts-worker}"
-    export QWEN_MODELS="${QWEN_MODELS:-$root/models}"
+    # shellcheck disable=SC1091
+    source "$root/scripts/models_dir.sh"
+    export QWEN_MODELS="$(qwen3_tts_models_dir)"
     export QWEN3_TTS_TIER="{{tier}}"
     export DYLD_LIBRARY_PATH="$root/build${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
     export LD_LIBRARY_PATH="$root/build${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -172,7 +180,9 @@ parity:
     root="$(git rev-parse --show-toplevel)"
     export QWEN_ROOT="$root"
     export QWEN_WORKER="${QWEN_WORKER:-$root/build/qwen3-tts-worker}"
-    export QWEN_MODELS="${QWEN_MODELS:-$root/models}"
+    # shellcheck disable=SC1091
+    source "$root/scripts/models_dir.sh"
+    export QWEN_MODELS="$(qwen3_tts_models_dir)"
     export QWEN_PARITY_SUITE="${QWEN_PARITY_SUITE:-$root/fixtures/golden/suite.v1.json}"
     export QWEN_PARITY_JSON="${QWEN_PARITY_JSON:-$root/artifacts/parity/report.json}"
     export DYLD_LIBRARY_PATH="$root/build${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"

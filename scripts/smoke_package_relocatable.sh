@@ -9,7 +9,9 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 require="${REQUIRE_PACKAGE_SMOKE:-0}"
 
 worker_lab="$root/build/qwen3-tts-worker"
-models_lab="$root/models"
+# shellcheck disable=SC1091
+source "$root/scripts/models_dir.sh"
+models_lab="$(qwen3_tts_models_dir 2>/dev/null || true)"
 if [[ ! -x "$worker_lab" || ! -f "$models_lab/qwen3-tts-0.6b-f16.gguf" ]]; then
   if [[ "$require" == "1" || "$require" == "true" ]]; then
     echo "missing lab worker/models for packaging smoke" >&2

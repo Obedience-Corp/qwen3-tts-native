@@ -63,7 +63,7 @@ just engine build            # macOS Metal; Linux CPU
 # Linux + NVIDIA:
 #   CUDA=1 just engine build
 just engine worker
-just convert models
+just convert models          # GGUF goes to QWEN3_TTS_MODELS, or /Volumes/fast/LLM_Models/qwen3-tts
 just release package
 just harness smoke
 just bench platform          # skips cleanly if binaries/models missing
@@ -78,7 +78,7 @@ Publishing: [docs/RELEASE.md](docs/RELEASE.md).
 ├── tools/           # C: worker_main.c, extract_embedding.c
 ├── scripts/         # convert, package, bake presets
 ├── third_party/     # engine pin (local checkout)
-├── models/          # local GGUF + presets (not committed)
+├── models/          # release-tarball layout only; maintainer weights stay outside the checkout
 ├── dist/            # release tarballs (not committed)
 ├── docs/            # protocol, distribution, platforms
 ├── cmd/             # optional Go CLIs (ensure, smoke, bench)

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Obedience-Corp/qwen3-tts-native/pkg/modelsdir"
 	"github.com/Obedience-Corp/qwen3-tts-native/pkg/workerclient"
 )
 
@@ -19,7 +20,11 @@ func main() {
 		}
 	}
 	worker := envOr("QWEN_WORKER", filepath.Join(root, "build", "qwen3-tts-worker"))
-	models := envOr("QWEN_MODELS", filepath.Join(root, "models"))
+	models, err := modelsdir.Resolve()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
 	out := envOr("QWEN_SMOKE_WAV", filepath.Join(root, "artifacts", "harness_vivian.wav"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)

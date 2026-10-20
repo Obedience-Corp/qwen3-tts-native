@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Obedience-Corp/qwen3-tts-native/pkg/modelsdir"
 	"github.com/Obedience-Corp/qwen3-tts-native/pkg/workerclient"
 )
 
@@ -118,12 +119,19 @@ func main() {
 		iters   = flag.Int("iters", 3, "iterations per fixture")
 		only    = flag.String("fixtures", "", "comma-separated fixture ids to run (default: all)")
 		worker  = flag.String("worker", envOr("QWEN_WORKER", filepath.Join(root, "build", "qwen3-tts-worker")), "worker binary")
-		models  = flag.String("models", envOr("QWEN_MODELS", filepath.Join(root, "models")), "model directory")
+		models  = flag.String("models", "", "model directory (default: QWEN3_TTS_MODELS, QWEN_MODELS, or the fast drive)")
 		preset  = flag.String("preset", envOr("QWEN_PRESET", "Vivian"), "baked preset name")
 		outPath = flag.String("out", envOr("QWEN_WARM_BENCH_JSON", ""), "write JSON report here (default: stdout)")
 		stream  = flag.Bool("stream", envOr("QWEN_WARM_BENCH_STREAM", "") != "", "request stage-B streamed PCM chunks")
 	)
 	flag.Parse()
+	if *models == "" {
+		resolved, err := modelsdir.Resolve()
+		if err != nil {
+			fail("%v", err)
+		}
+		*models = resolved
+	}
 
 	selected, err := selectFixtures(*only)
 	if err != nil {
@@ -226,7 +234,7 @@ func main() {
 			ChunksMedian: median(chunks), UnderrunTotal: under,
 			AudioSMedian: median(audio),
 			RTFMedian:    median(rtfs), RTFMax: max(rtfs),
-			Runs:         runs,
+			Runs: runs,
 		})
 	}
 	if len(allRTF) > 0 {

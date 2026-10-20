@@ -7,10 +7,20 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 worker="${QWEN3_TTS_WORKER:-${QWEN_WORKER:-$root/build/qwen3-tts-worker}}"
-models="${QWEN3_TTS_MODELS:-${QWEN_MODELS:-$root/models}}"
 backend="${QWEN3_TTS_BACKEND:-auto}"
 require_run="${REQUIRE_PLATFORM_SMOKE:-0}"
 require_cuda="${REQUIRE_CUDA:-0}"
+# shellcheck disable=SC1091
+source "$root/scripts/models_dir.sh"
+if ! models="$(qwen3_tts_models_dir)"; then
+  if [[ "$require_run" == "1" || "$require_run" == "true" ]]; then
+    echo "platform smoke requires a model directory. Set QWEN3_TTS_MODELS, or mount /Volumes/fast." >&2
+    exit 1
+  fi
+  echo "platform smoke skipped: model directory is not configured"
+  echo "Set QWEN3_TTS_MODELS, or mount /Volumes/fast."
+  exit 0
+fi
 require_vulkan="${REQUIRE_VULKAN:-0}"
 if [[ "$require_cuda" == "1" || "$require_cuda" == "true" ]]; then
   backend="cuda"

@@ -3,7 +3,7 @@
 # Usage:
 #   INSTALL_ROOT=~/.local/share/qwen3-tts ./examples/shell/synth.sh "Hello world" Vivian out.wav
 #   # or lab tree:
-#   QWEN_WORKER=./build/qwen3-tts-worker QWEN_MODELS=./models ./examples/shell/synth.sh "Hi" Vivian /tmp/hi.wav
+#   QWEN_WORKER=./build/qwen3-tts-worker QWEN3_TTS_MODELS=/Volumes/fast/LLM_Models/qwen3-tts ./examples/shell/synth.sh "Hi" Vivian /tmp/hi.wav
 set -euo pipefail
 
 text="${1:-Hello from qwen3-tts-native.}"
@@ -18,7 +18,9 @@ if [[ -n "${INSTALL_ROOT:-}" ]]; then
 else
   root="$(cd "$(dirname "$0")/../.." && pwd)"
   worker="${QWEN_WORKER:-$root/build/qwen3-tts-worker}"
-  models="${QWEN_MODELS:-$root/models}"
+  # shellcheck disable=SC1091
+  source "$root/scripts/models_dir.sh"
+  models="$(qwen3_tts_models_dir)"
   export DYLD_LIBRARY_PATH="$(dirname "$worker")${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
   export LD_LIBRARY_PATH="$(dirname "$worker")${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi

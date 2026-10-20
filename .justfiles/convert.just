@@ -34,7 +34,8 @@ deps:
       "$root/.venv/bin/pip" install -r "$root/scripts/requirements-convert.txt"
     fi
 
-# Download HF weights and write GGUF into models/ (maintainer only).
+# Download HF weights and write GGUF outside the repo (maintainer only).
+# Directory: QWEN3_TTS_MODELS, else /Volumes/fast/LLM_Models/qwen3-tts.
 # TIER=0.6b (default) | 1.7b | all
 models tier="0.6b":
     #!/usr/bin/env bash
@@ -51,7 +52,7 @@ models-17b:
 models-all:
     just convert models all
 
-# Skip re-download if HF snapshots already under third_party engine models.
+# Skip re-download when the GGUF directory already holds the HF snapshot.
 models-offline tier="0.6b":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -59,7 +60,7 @@ models-offline tier="0.6b":
     chmod +x "$root/scripts/convert_models.sh"
     TIER="{{tier}}" SKIP_DOWNLOAD=1 "$root/scripts/convert_models.sh"
 
-# Bake CustomVoice preset embeddings into models/presets/ (maintainer only).
+# Bake CustomVoice preset embeddings next to the GGUF (maintainer only).
 presets:
     #!/usr/bin/env bash
     set -euo pipefail

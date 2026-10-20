@@ -6,12 +6,18 @@
 #   scripts/convert_models.sh              # default tier 0.6b
 #   TIER=1.7b scripts/convert_models.sh    # 1.7B (~4GB download)
 #   TIER=all scripts/convert_models.sh     # both tiers
+#
+# GGUF and the Hugging Face snapshot are written to QWEN3_TTS_MODELS, or to
+# /Volumes/fast/LLM_Models/qwen3-tts when that volume is mounted.
+# See scripts/models_dir.sh. This script does not write weights into the repo.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 engine="$root/third_party/qwen3-tts.cpp"
 venv="$root/.venv"
-out_models="$root/models"
+# shellcheck disable=SC1091
+source "$root/scripts/models_dir.sh"
+out_models="$(qwen3_tts_models_dir)"
 tier_req="${TIER:-${QWEN3_TTS_TIER:-0.6b}}"
 
 if [[ ! -d "$engine/scripts" ]]; then
@@ -32,12 +38,13 @@ if [[ ! -x "$venv/bin/python" ]]; then
 fi
 
 mkdir -p "$out_models"
+out_models="$(cd "$out_models" && pwd)"
 cd "$engine"
 
 convert_one() {
   local tier="$1"
   echo "=== converting tier=${tier} ==="
-  args=(--models-dir "$engine/models" --coreml off --tier "$tier")
+  args=(--models-dir "$out_models" --coreml off --tier "$tier")
   [[ -n "${FORCE:-}" ]] && args+=(--force)
   [[ -n "${SKIP_DOWNLOAD:-}" ]] && args+=(--skip-download)
   "$root/.venv/bin/python" scripts/setup_pipeline_models.py "${args[@]}"
@@ -60,10 +67,8 @@ case "$tier_req" in
     ;;
 esac
 
-# Copy artifacts into lab models/ (distribution layout)
 for f in qwen3-tts-0.6b-f16.gguf qwen3-tts-1.7b-f16.gguf qwen3-tts-tokenizer-f16.gguf; do
-  if [[ -f "$engine/models/$f" ]]; then
-    cp -f "$engine/models/$f" "$out_models/$f"
+  if [[ -f "$out_models/$f" ]]; then
     echo "[ok] $out_models/$f"
   fi
 done

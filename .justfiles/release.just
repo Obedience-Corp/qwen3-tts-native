@@ -24,7 +24,7 @@ package-smoke:
 checklist:
     @echo "Maintainer only (users use Samantha models ensure):"
     @echo "1. ENGINE_SHA pin + just engine build"
-    @echo "2. just convert models  (offline Python; do not commit weights)"
+    @echo "2. just convert models  (offline Python; weights go to QWEN3_TTS_MODELS or /Volumes/fast/LLM_Models/qwen3-tts)"
     @echo "3. just bench smoke"
     @echo "4. just release package"
     @echo "5. Attach dist/*.tar.gz to GitHub Release; point Samantha ensure at URL + hashes"

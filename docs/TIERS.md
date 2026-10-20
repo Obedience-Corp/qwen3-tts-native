@@ -30,7 +30,7 @@ just convert models 0.6b     # default
 just convert models 1.7b     # ~4GB HF download
 just convert models all
 just engine build && just engine worker
-just release package              # includes 1.7B GGUF when present under models/
+just release package              # includes 1.7B GGUF when that file is in the maintainer model directory
 ```
 
 Select tier at runtime:

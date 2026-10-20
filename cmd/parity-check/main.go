@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Obedience-Corp/qwen3-tts-native/pkg/modelsdir"
 	"github.com/Obedience-Corp/qwen3-tts-native/pkg/parity"
 	"github.com/Obedience-Corp/qwen3-tts-native/pkg/workerclient"
 )
@@ -134,7 +135,10 @@ func runFixturesOnly(root, suiteDir string, suite parity.Suite, caseID string) [
 
 func runLive(root string, suite parity.Suite, caseID string) []parity.Result {
 	worker := envOr("QWEN_WORKER", filepath.Join(root, "build", "qwen3-tts-worker"))
-	models := envOr("QWEN_MODELS", filepath.Join(root, "models"))
+	models, err := modelsdir.Resolve()
+	if err != nil {
+		fail("%v", err)
+	}
 	if _, err := os.Stat(worker); err != nil {
 		fail("missing worker %s — just engine build (or set QWEN_WORKER)", worker)
 	}

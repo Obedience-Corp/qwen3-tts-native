@@ -1,7 +1,7 @@
 package modelsdir
 
 import (
-	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -22,7 +22,7 @@ func TestResolve(t *testing.T) {
 	t.Run("alias", func(t *testing.T) {
 		t.Setenv("QWEN3_TTS_MODELS", "")
 		t.Setenv("QWEN_MODELS", "/weights/alias")
-		t.Setenv("QWEN3_TTS_FAST_ROOT", filepath.Join(t.TempDir(), "missing"))
+		t.Setenv("QWEN3_TTS_FAST_ROOT", t.TempDir())
 		got, err := Resolve()
 		if err != nil {
 			t.Fatal(err)
@@ -32,27 +32,16 @@ func TestResolve(t *testing.T) {
 		}
 	})
 
-	t.Run("fast drive", func(t *testing.T) {
+	t.Run("refuse without an explicit directory", func(t *testing.T) {
 		t.Setenv("QWEN3_TTS_MODELS", "")
 		t.Setenv("QWEN_MODELS", "")
-		root := t.TempDir()
-		t.Setenv("QWEN3_TTS_FAST_ROOT", root)
-		got, err := Resolve()
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := filepath.Join(root, "LLM_Models", "qwen3-tts")
-		if got != want {
-			t.Fatalf("got %q want %q", got, want)
-		}
-	})
-
-	t.Run("refuse", func(t *testing.T) {
-		t.Setenv("QWEN3_TTS_MODELS", "")
-		t.Setenv("QWEN_MODELS", "")
-		t.Setenv("QWEN3_TTS_FAST_ROOT", filepath.Join(t.TempDir(), "missing"))
-		if _, err := Resolve(); err == nil {
+		t.Setenv("QWEN3_TTS_FAST_ROOT", t.TempDir())
+		_, err := Resolve()
+		if err == nil {
 			t.Fatal("expected an error")
+		}
+		if strings.Contains(err.Error(), "Volumes") || strings.Contains(err.Error(), "LLM_Models") {
+			t.Fatalf("error named a machine path: %v", err)
 		}
 	})
 }

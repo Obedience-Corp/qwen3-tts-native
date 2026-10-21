@@ -14,11 +14,11 @@ require_cuda="${REQUIRE_CUDA:-0}"
 source "$root/scripts/models_dir.sh"
 if ! models="$(qwen3_tts_models_dir)"; then
   if [[ "$require_run" == "1" || "$require_run" == "true" ]]; then
-    echo "platform smoke requires a model directory. Set QWEN3_TTS_MODELS, or mount /Volumes/fast." >&2
+    echo "platform smoke requires a model directory. Set QWEN3_TTS_MODELS." >&2
     exit 1
   fi
   echo "platform smoke skipped: model directory is not configured"
-  echo "Set QWEN3_TTS_MODELS, or mount /Volumes/fast."
+  echo "Set QWEN3_TTS_MODELS."
   exit 0
 fi
 require_vulkan="${REQUIRE_VULKAN:-0}"

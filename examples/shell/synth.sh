@@ -3,7 +3,7 @@
 # Usage:
 #   INSTALL_ROOT=~/.local/share/qwen3-tts ./examples/shell/synth.sh "Hello world" Vivian out.wav
 #   # or lab tree:
-#   QWEN_WORKER=./build/qwen3-tts-worker QWEN3_TTS_MODELS=/Volumes/fast/LLM_Models/qwen3-tts ./examples/shell/synth.sh "Hi" Vivian /tmp/hi.wav
+#   QWEN_WORKER=./build/qwen3-tts-worker QWEN3_TTS_MODELS=/path/to/gguf ./examples/shell/synth.sh "Hi" Vivian /tmp/hi.wav
 set -euo pipefail
 
 text="${1:-Hello from qwen3-tts-native.}"

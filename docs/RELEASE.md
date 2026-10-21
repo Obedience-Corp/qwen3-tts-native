@@ -7,7 +7,7 @@ single product.
 
 1. `just engine pin && just engine build` (or `CUDA=1` on Linux+NVIDIA)
 2. `just engine worker`
-3. `just convert models` (offline; Python allowed only here). Weights go to `QWEN3_TTS_MODELS`, or `/Volumes/fast/LLM_Models/qwen3-tts` when that volume is mounted. The checkout is not a weight store.
+3. `just convert models` (offline; Python allowed only here). Set `QWEN3_TTS_MODELS` or `QWEN_MODELS` to the GGUF directory. The checkout is not a weight store, and this repo has no machine-specific default.
 4. `just bench smoke` / `just bench parity` as applicable
 5. `just release package` → `dist/qwen3-tts-native-<git>-<os>-<arch>[-cuda|-vulkan].tar.gz`
 

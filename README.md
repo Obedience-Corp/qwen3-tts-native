@@ -63,7 +63,7 @@ just engine build            # macOS Metal; Linux CPU
 # Linux + NVIDIA:
 #   CUDA=1 just engine build
 just engine worker
-just convert models          # GGUF goes to QWEN3_TTS_MODELS, or /Volumes/fast/LLM_Models/qwen3-tts
+just convert models          # set QWEN3_TTS_MODELS; GGUF is not written into the checkout
 just release package
 just harness smoke
 just bench platform          # skips cleanly if binaries/models missing

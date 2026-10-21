@@ -35,7 +35,7 @@ deps:
     fi
 
 # Download HF weights and write GGUF outside the repo (maintainer only).
-# Directory: QWEN3_TTS_MODELS, else /Volumes/fast/LLM_Models/qwen3-tts.
+# Directory: QWEN3_TTS_MODELS, or QWEN_MODELS. No in-repo or machine default.
 # TIER=0.6b (default) | 1.7b | all
 models tier="0.6b":
     #!/usr/bin/env bash

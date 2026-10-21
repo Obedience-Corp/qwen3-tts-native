@@ -8,8 +8,8 @@
 #   TIER=all scripts/convert_models.sh     # both tiers
 #
 # GGUF and the Hugging Face snapshot are written to QWEN3_TTS_MODELS, or to
-# /Volumes/fast/LLM_Models/qwen3-tts when that volume is mounted.
-# See scripts/models_dir.sh. This script does not write weights into the repo.
+# QWEN_MODELS. See scripts/models_dir.sh. This script does not write weights
+# into the repo, and it has no machine-specific default.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"

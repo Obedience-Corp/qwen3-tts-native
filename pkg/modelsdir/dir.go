@@ -5,15 +5,13 @@ package modelsdir
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
 // Resolve returns the directory that holds maintainer GGUF weights.
 //
-// Order: QWEN3_TTS_MODELS, QWEN_MODELS, then
-// ${QWEN3_TTS_FAST_ROOT:-/Volumes/fast}/LLM_Models/qwen3-tts when that
-// root exists. It does not fall back to a directory inside the repository.
+// Order: QWEN3_TTS_MODELS, then QWEN_MODELS. There is no machine-specific
+// default. It does not fall back to a directory inside the repository.
 func Resolve() (string, error) {
 	if dir := strings.TrimSpace(os.Getenv("QWEN3_TTS_MODELS")); dir != "" {
 		return dir, nil
@@ -21,13 +19,5 @@ func Resolve() (string, error) {
 	if dir := strings.TrimSpace(os.Getenv("QWEN_MODELS")); dir != "" {
 		return dir, nil
 	}
-	root := strings.TrimSpace(os.Getenv("QWEN3_TTS_FAST_ROOT"))
-	if root == "" {
-		root = "/Volumes/fast"
-	}
-	info, err := os.Stat(root)
-	if err != nil || !info.IsDir() {
-		return "", fmt.Errorf("set QWEN3_TTS_MODELS to the GGUF directory; refusing to use a repository models directory (%s is not a directory)", root)
-	}
-	return filepath.Join(root, "LLM_Models", "qwen3-tts"), nil
+	return "", fmt.Errorf("set QWEN3_TTS_MODELS to the GGUF directory; refusing to use a repository models directory")
 }

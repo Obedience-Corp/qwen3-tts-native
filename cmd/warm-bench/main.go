@@ -119,7 +119,7 @@ func main() {
 		iters   = flag.Int("iters", 3, "iterations per fixture")
 		only    = flag.String("fixtures", "", "comma-separated fixture ids to run (default: all)")
 		worker  = flag.String("worker", envOr("QWEN_WORKER", filepath.Join(root, "build", "qwen3-tts-worker")), "worker binary")
-		models  = flag.String("models", "", "model directory (default: QWEN3_TTS_MODELS, QWEN_MODELS, or the fast drive)")
+		models  = flag.String("models", "", "model directory (default: QWEN3_TTS_MODELS or QWEN_MODELS)")
 		preset  = flag.String("preset", envOr("QWEN_PRESET", "Vivian"), "baked preset name")
 		outPath = flag.String("out", envOr("QWEN_WARM_BENCH_JSON", ""), "write JSON report here (default: stdout)")
 		stream  = flag.Bool("stream", envOr("QWEN_WARM_BENCH_STREAM", "") != "", "request stage-B streamed PCM chunks")

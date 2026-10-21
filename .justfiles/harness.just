@@ -11,7 +11,9 @@ test:
     (cd "$root" && go test ./pkg/... ./cmd/platform-smoke/)
     chmod +x "$root/scripts/smoke_platform_test.sh" "$root/scripts/smoke_platform.sh" \
       "$root/scripts/goos_goarch.sh" "$root/scripts/goos_goarch_test.sh" \
-      "$root/scripts/engine_cuda_flag_test.sh"
+      "$root/scripts/engine_cuda_flag_test.sh" \
+      "$root/scripts/models_dir.sh" "$root/scripts/models_dir_test.sh"
+    "$root/scripts/models_dir_test.sh"
     "$root/scripts/smoke_platform_test.sh"
     "$root/scripts/goos_goarch_test.sh"
     "$root/scripts/engine_cuda_flag_test.sh"
@@ -34,7 +36,9 @@ smoke:
     set -euo pipefail
     root="$(git rev-parse --show-toplevel)"
     worker="$root/build/qwen3-tts-worker"
-    models="$root/models"
+    # shellcheck disable=SC1091
+    source "$root/scripts/models_dir.sh"
+    models="$(qwen3_tts_models_dir)"
     if [[ ! -x "$worker" ]]; then
       echo "Missing worker — just engine worker" >&2
       exit 1

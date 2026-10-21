@@ -10,7 +10,9 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 engine="$root/third_party/qwen3-tts.cpp"
 cli="$engine/build/qwen3-tts-cli"
-models="$root/models"
+# shellcheck disable=SC1091
+source "$root/scripts/models_dir.sh"
+models="$(qwen3_tts_models_dir)"
 worker="$root/build/qwen3-tts-worker"
 
 # shellcheck source=goos_goarch.sh
@@ -48,7 +50,7 @@ if [[ ! -x "$worker" ]]; then
   exit 1
 fi
 if [[ ! -f "$models/qwen3-tts-0.6b-f16.gguf" || ! -f "$models/qwen3-tts-tokenizer-f16.gguf" ]]; then
-  echo "Missing GGUF — convert first (maintainer: just convert models)" >&2
+  echo "Missing GGUF in $models — convert first (maintainer: just convert models)" >&2
   exit 1
 fi
 if [[ ! -d "$models/presets" ]] || [[ ! -f "$models/presets/presets.json" ]]; then

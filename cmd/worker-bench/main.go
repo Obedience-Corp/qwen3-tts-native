@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Obedience-Corp/qwen3-tts-native/pkg/modelsdir"
 	"github.com/Obedience-Corp/qwen3-tts-native/pkg/workerclient"
 )
 
@@ -36,7 +37,10 @@ type report struct {
 func main() {
 	root := envOr("QWEN_ROOT", mustWD())
 	worker := envOr("QWEN_WORKER", filepath.Join(root, "build", "qwen3-tts-worker"))
-	models := envOr("QWEN_MODELS", filepath.Join(root, "models"))
+	models, err := modelsdir.Resolve()
+	if err != nil {
+		fail("%v", err)
+	}
 	outPath := envOr("QWEN_BENCH_JSON", filepath.Join(root, "artifacts", "latency", "worker_warmish.json"))
 	phrase := envOr("QWEN_PHRASE", "Hello from the native warm worker latency bench.")
 	preset := envOr("QWEN_PRESET", "Vivian")

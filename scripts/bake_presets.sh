@@ -5,10 +5,12 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-models="$root/models"
+# shellcheck disable=SC1091
+source "$root/scripts/models_dir.sh"
+models="$(qwen3_tts_models_dir)"
 cli="$root/third_party/qwen3-tts.cpp/build/qwen3-tts-cli"
 extract="$root/build/extract_embedding"
-presets_out="$root/models/presets"
+presets_out="$models/presets"
 refs="$root/artifacts/preset_refs"
 
 # Optional offline Python CustomVoice install for reference WAV baking only.
@@ -94,7 +96,7 @@ done
 # condition it (the worker picks per-tier files by dimension). Same reference
 # WAVs, extracted through the 1.7b model when its GGUF is present.
 if [[ -f "$models/qwen3-tts-1.7b-f16.gguf" ]]; then
-  out17="$root/models/presets-1.7b"
+  out17="$models/presets-1.7b"
   mkdir -p "$out17"
   for v in "${VOICES[@]}"; do
     wav="$refs/${v}.wav"

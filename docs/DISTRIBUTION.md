@@ -30,8 +30,8 @@ available). Product installs must not depend on a maintainer build tree.
 ```text
 just engine pin && just engine build     # or CUDA=1 just engine build on Linux+NVIDIA
 just engine worker
-just convert models
-just release package
+just convert models                      # requires QWEN3_TTS_MODELS or QWEN_MODELS
+just release package                     # reads that same directory
 # publish dist/*.tar.gz + checksums per platform
 ```
 

@@ -33,7 +33,8 @@ fi
 # Prefer Go smoke if available (writes WAV correctly from f32le PCM).
 if command -v go >/dev/null 2>&1; then
   root="$(cd "$(dirname "$0")/../.." && pwd)"
-  export QWEN_WORKER="$worker" QWEN_MODELS="$models" QWEN_SMOKE_WAV="$out"
+  # The directory chosen above wins over an inherited QWEN3_TTS_MODELS.
+  export QWEN_WORKER="$worker" QWEN3_TTS_MODELS="$models" QWEN_MODELS="$models" QWEN_SMOKE_WAV="$out"
   (cd "$root" && go run ./cmd/worker-smoke)
   exit 0
 fi

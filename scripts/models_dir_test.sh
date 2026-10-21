@@ -13,6 +13,15 @@ got="$(QWEN3_TTS_MODELS=/weights/explicit QWEN_MODELS=/weights/alias QWEN3_TTS_F
 got="$(QWEN_MODELS=/weights/alias QWEN3_TTS_FAST_ROOT=/missing qwen3_tts_models_dir)"
 [[ "$got" == "/weights/alias" ]] || { echo "QWEN_MODELS alias lost: $got"; exit 1; }
 
+got="$(QWEN3_TTS_MODELS='   ' QWEN_MODELS=/weights/alias qwen3_tts_models_dir)"
+[[ "$got" == "/weights/alias" ]] || { echo "whitespace-only QWEN3_TTS_MODELS did not fall through: $got"; exit 1; }
+
+got="$(QWEN3_TTS_MODELS=' /weights/explicit ' qwen3_tts_models_dir)"
+[[ "$got" == "/weights/explicit" ]] || { echo "surrounding whitespace kept: [$got]"; exit 1; }
+
+got="$(QWEN_MODELS=' /weights/alias ' qwen3_tts_models_dir)"
+[[ "$got" == "/weights/alias" ]] || { echo "alias whitespace kept: [$got]"; exit 1; }
+
 out="$(mktemp)"
 err="$(mktemp)"
 trap 'rm -f "$out" "$err"' EXIT

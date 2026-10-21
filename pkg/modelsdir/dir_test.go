@@ -32,6 +32,30 @@ func TestResolve(t *testing.T) {
 		}
 	})
 
+	t.Run("whitespace only falls through", func(t *testing.T) {
+		t.Setenv("QWEN3_TTS_MODELS", "   ")
+		t.Setenv("QWEN_MODELS", "/weights/alias")
+		got, err := Resolve()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != "/weights/alias" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
+	t.Run("trim surrounding space", func(t *testing.T) {
+		t.Setenv("QWEN3_TTS_MODELS", " /weights/explicit ")
+		t.Setenv("QWEN_MODELS", "/weights/alias")
+		got, err := Resolve()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != "/weights/explicit" {
+			t.Fatalf("got %q", got)
+		}
+	})
+
 	t.Run("refuse without an explicit directory", func(t *testing.T) {
 		t.Setenv("QWEN3_TTS_MODELS", "")
 		t.Setenv("QWEN_MODELS", "")
